@@ -105,70 +105,86 @@ install_slssteam() {
     
     # Create temp directory for download
     local temp_dir=$(mktemp -d)
-    info "  Downloading SLSsteam..."
+    info "  Downloading SLSsteam (this may take a minute)..."
     
-    # Download latest SLSsteam release
+    # Download latest SLSsteam release - use releases/latest redirect
     cd "$temp_dir"
-    if curl -fsSL -o SLSsteam-Any.7z "https://github.com/AceSLS/SLSsteam/releases/download/20260122094411/SLSsteam-Any.7z" 2>&1; then
-        ok "Downloaded SLSsteam"
-        
-        # Extract
-        info "  Extracting to $temp_dir..."
-        if 7z x SLSsteam-Any.7z 2>&1 | tail -3; then
-            ok "Extracted SLSsteam"
-            
-            # Debug: show what was extracted
-            info "  Contents of $temp_dir:"
-            ls -la "$temp_dir"
-            echo ""
-            
-            # Find setup.sh recursively
-            info "  Searching for setup.sh..."
-            local setup_script=$(find "$temp_dir" -name "setup.sh" -type f 2>/dev/null | head -1)
-            
-            if [ -n "$setup_script" ]; then
-                ok "Found setup.sh at: $setup_script"
-                local setup_dir=$(dirname "$setup_script")
-                
-                info "  Changing to: $setup_dir"
-                cd "$setup_dir" || {
-                    warn "Failed to cd to $setup_dir"
-                    cd /
-                    rm -rf "$temp_dir"
-                    return 1
-                }
-                
-                info "  Running setup.sh install..."
-                if bash setup.sh install; then
-                    ok "SLSsteam installed successfully"
-                    cd /
-                    rm -rf "$temp_dir"
-                    return 0
-                else
-                    warn "SLSsteam setup.sh install failed"
-                    cd /
-                    rm -rf "$temp_dir"
-                    return 1
-                fi
-            else
-                warn "setup.sh not found anywhere in extracted files"
-                echo -e "  ${YELLOW}Full directory tree:${NC}"
-                find "$temp_dir" -type f | head -20
-                echo ""
-                echo -e "  ${YELLOW}Try manual install from:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam/releases${NC}"
-                cd /
-                rm -rf "$temp_dir"
-                return 1
-            fi
-        else
-            warn "Failed to extract SLSsteam"
+    
+    # Try to download from releases/latest
+    if ! curl -fsSL -o SLSsteam-Any.7z -L "https://github.com/AceSLS/SLSsteam/releases/download/latest/SLSsteam-Any.7z"; then
+        warn "Failed to download SLSsteam from releases"
+        echo -e "  Manual install: ${CYAN}https://github.com/AceSLS/SLSsteam/releases${NC}"
+        cd /
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    ok "Downloaded SLSsteam"
+    
+    # Check if 7z file exists and has content
+    if [ ! -s "SLSsteam-Any.7z" ]; then
+        warn "Downloaded file is empty or not found"
+        cd /
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Extract - properly check exit code
+    info "  Extracting..."
+    local extract_output=$(7z x SLSsteam-Any.7z 2>&1)
+    local extract_code=$?
+    
+    if [ $extract_code -ne 0 ]; then
+        warn "7z extraction failed with code $extract_code"
+        echo -e "  ${YELLOW}7z output:${NC}"
+        echo "$extract_output" | head -20
+        cd /
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    ok "Extracted successfully"
+    
+    # Show what was extracted
+    info "  Checking extracted contents..."
+    local file_count=$(find "$temp_dir" -type f | wc -l)
+    info "  Found $file_count files in extraction"
+    
+    # Find setup.sh
+    local setup_script
+    if [ -f "setup.sh" ]; then
+        setup_script="./setup.sh"
+        info "  Found setup.sh in current directory"
+    else
+        setup_script=$(find "$temp_dir" -name "setup.sh" -type f 2>/dev/null | head -1)
+        if [ -z "$setup_script" ]; then
+            warn "setup.sh not found in extracted files"
+            echo -e "  ${YELLOW}Files found:${NC}"
+            find "$temp_dir" -type f
             cd /
             rm -rf "$temp_dir"
             return 1
         fi
+        info "  Found setup.sh at: $setup_script"
+    fi
+    
+    # Change to directory containing setup.sh and run it
+    local setup_dir=$(dirname "$setup_script")
+    cd "$setup_dir" || {
+        warn "Could not cd to $setup_dir"
+        cd /
+        rm -rf "$temp_dir"
+        return 1
+    }
+    
+    info "  Running setup.sh install from: $setup_dir"
+    if bash setup.sh install; then
+        ok "SLSsteam installed successfully"
+        cd /
+        rm -rf "$temp_dir"
+        return 0
     else
-        warn "Failed to download SLSsteam - check your internet connection"
-        echo -e "  Manual install: ${CYAN}https://github.com/AceSLS/SLSsteam/releases${NC}"
+        warn "SLSsteam setup.sh failed"
         cd /
         rm -rf "$temp_dir"
         return 1
