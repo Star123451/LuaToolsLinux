@@ -21,23 +21,29 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 - **[ACCELA](https://github.com/ciscosweater/enter-the-wired)** — game client/downloader
 
 ## Installation
-
-1. Install Millennium:
+1. Install ACCELA + SLSsteam:
+    ```bash
+   curl -fsSL https://raw.githubusercontent.com/ciscosweater/enter-the-wired/main/enter-the-wired | bash
+   ```
+    
+2. Install Millennium:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/scripts/install.sh | bash
    ```
+   
+3. Make luatools folder in /.local/share/millennium/plugins
 
-2. Clone this repo into the Millennium plugins directory:
+4. Clone this repo into the LuaTools plugin directory
    ```bash
-   git clone <repo-url> ~/.local/share/millennium/plugins/luatools
+   git clone https://github.com/Star123451/LuaToolsLinux
    ```
 
-3. Install Python dependencies:
+5. Install Python dependencies:
    ```bash
    pip install -r ~/.local/share/millennium/plugins/luatools/requirements.txt
    ```
-
-4. Restart Steam — LuaTools will load automatically via Millennium.
+   
+6. Restart Steam — LuaTools will load automatically via Millennium.
 
 ## Project Structure
 
