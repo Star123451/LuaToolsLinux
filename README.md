@@ -6,7 +6,8 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 
 ## NOTE
 
-- **This Port is in EARLY ACCESS** - Do not expect a polished experience. Expect something that works (albeit messily). This plugin will improve overtime but basic functionality is operational. 
+- **This Port is in EARLY ACCESS** - Do not expect a polished experience. Expect something that works (albeit messily). This plugin will improve overtime but basic functionality is operational.
+- **If you get an error saying "Failed to find executable" or "Content still encrypted", try opening the game executable from your file browser by clicking the gear, going to Manage, then "Browse Local Files".
 
 ## Features
 
