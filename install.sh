@@ -122,9 +122,43 @@ install_accela() {
     fi
 }
 
-# --- Detect Millennium plugins directory ---
+# --- Detect and Install Millennium ---
 MILLENNIUM_DIR=""
+MILLENNIUM_INSTALLED=false
 
+# Check for actual Millennium installation (not just directories)
+# Millennium installs core files in Steam directory and creates ext_storage
+if [ -d "$HOME/.local/share/Steam/steamui/skins" ] || [ -d "$HOME/.steam/steam/steamui/skins" ]; then
+    MILLENNIUM_INSTALLED=true
+fi
+
+# Also check for Millennium ext_storage which indicates successful setup
+if [ -d "$HOME/.local/share/millennium/ext_storage" ] || [ -d "$HOME/.millennium/ext_storage" ]; then
+    MILLENNIUM_INSTALLED=true
+fi
+
+if [ "$MILLENNIUM_INSTALLED" = false ]; then
+    warn "Millennium not properly installed or detected."
+    info "Installing/Reinstalling Millennium..."
+    echo -e "  ${YELLOW}Note: Steam must be closed for Millennium installation!${NC}"
+    echo ""
+    
+    # Check if Steam is running
+    if pgrep -x "steam" > /dev/null || pgrep -x "steamwebhelper" > /dev/null; then
+        warn "Steam is currently running!"
+        echo -e "  ${YELLOW}Please close Steam completely before continuing.${NC}"
+        read -rp "Press Enter once Steam is closed..."
+    fi
+    
+    if install_millennium; then
+        ok "Millennium installation completed"
+        echo -e "  ${CYAN}Please start Steam after this script finishes${NC}"
+    else
+        fail "Millennium installation failed. Please install manually from https://steambrew.app"
+    fi
+fi
+
+# Now find the plugins directory
 candidates=(
     "$HOME/.local/share/millennium/plugins"
     "$HOME/.millennium/plugins"
@@ -139,38 +173,11 @@ for dir in "${candidates[@]}"; do
     fi
 done
 
+# If still not found, create default directory
 if [ -z "$MILLENNIUM_DIR" ]; then
-    # Check if Millennium is installed at all
-    if [ -d "$HOME/.local/share/millennium" ]; then
-        MILLENNIUM_DIR="$HOME/.local/share/millennium/plugins"
-        mkdir -p "$MILLENNIUM_DIR"
-    elif [ -d "$HOME/.millennium" ]; then
-        MILLENNIUM_DIR="$HOME/.millennium/plugins"
-        mkdir -p "$MILLENNIUM_DIR"
-    else
-        warn "Millennium not found."
-        echo ""
-        read -rp "Install Millennium now? [Y/n] " -n 1 response
-        echo ""
-        if [[ ! "$response" =~ ^[Nn]$ ]]; then
-            if install_millennium; then
-                # Re-check for Millennium directory
-                for dir in "${candidates[@]}"; do
-                    if [ -d "$dir" ]; then
-                        MILLENNIUM_DIR="$dir"
-                        break
-                    fi
-                done
-            fi
-        fi
-        
-        # If still not found, use default
-        if [ -z "$MILLENNIUM_DIR" ]; then
-            MILLENNIUM_DIR="$HOME/.local/share/millennium/plugins"
-            mkdir -p "$MILLENNIUM_DIR"
-            info "Using default directory: $MILLENNIUM_DIR"
-        fi
-    fi
+    MILLENNIUM_DIR="$HOME/.local/share/millennium/plugins"
+    mkdir -p "$MILLENNIUM_DIR"
+    info "Created plugins directory: $MILLENNIUM_DIR"
 fi
 
 INSTALL_DIR="$MILLENNIUM_DIR/$PLUGIN_NAME"
@@ -200,49 +207,50 @@ fi
 
 ok "LuaTools installation complete"
 
-# --- Install/Check for SLSsteam ---
+# --- Install/Reinstall SLSsteam ---
 echo ""
 if [ -f "$HOME/.local/share/SLSsteam/SLSsteam.so" ]; then
-    ok "SLSsteam detected"
+    info "SLSsteam detected - reinstalling to ensure it's working..."
+    rm -rf "$HOME/.local/share/SLSsteam"
 else
-    warn "SLSsteam not found"
-    read -rp "Install SLSsteam now? [Y/n] " -n 1 response
-    echo ""
-    if [[ ! "$response" =~ ^[Nn]$ ]]; then
-        install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
-    fi
+    info "SLSsteam not found - installing..."
 fi
+install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
 
-# --- Install/Check for ACCELA ---
+# --- Install/Reinstall ACCELA ---
 ACCELA_FOUND=false
 for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
     if [ -d "$p" ]; then
-        ok "ACCELA detected at $p"
+        info "ACCELA detected at $p - reinstalling to ensure it's working..."
+        rm -rf "$p"
         ACCELA_FOUND=true
         break
     fi
 done
 if [ "$ACCELA_FOUND" = false ]; then
-    warn "ACCELA not found"
-    read -rp "Install ACCELA now? [Y/n] " -n 1 response
-    echo ""
-    if [[ ! "$response" =~ ^[Nn]$ ]]; then
-        install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
-    fi
+    info "ACCELA not found - installing..."
 fi
+install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
 
 # --- Done ---
 echo ""
 echo -e "${GREEN}${BOLD}✓ Installation complete!${NC}"
 echo ""
 echo -e "${BOLD}Next steps:${NC}"
-echo -e "  1. Restart Steam for changes to take effect"
-echo -e "  2. LuaTools will load automatically via Millennium"
+echo -e "  1. ${CYAN}Make sure Steam is COMPLETELY closed${NC} (check with: ${CYAN}pkill steam${NC})"
+echo -e "  2. ${CYAN}Start Steam${NC} - Millennium will load automatically"
+echo -e "  3. In Steam, open ${CYAN}Settings > Millennium${NC} to verify it's working"
+echo -e "  4. LuaTools plugin will be available in Millennium plugins list"
 echo ""
 echo -e "${BOLD}Component Status:${NC}"
 
 # Summary of what's installed
-[ -d "$MILLENNIUM_DIR" ] && echo -e "  ${GREEN}✓${NC} Millennium" || echo -e "  ${RED}✗${NC} Millennium ${YELLOW}(required)${NC}"
+# Check for actual Millennium installation
+if [ -d "$HOME/.local/share/Steam/steamui/skins" ] || [ -d "$HOME/.steam/steam/steamui/skins" ] || [ -d "$HOME/.local/share/millennium/ext_storage" ] || [ -d "$HOME/.millennium/ext_storage" ]; then
+    echo -e "  ${GREEN}✓${NC} Millennium"
+else
+    echo -e "  ${RED}✗${NC} Millennium ${YELLOW}(required - please restart Steam after install)${NC}"
+fi
 [ -f "$HOME/.local/share/SLSsteam/SLSsteam.so" ] && echo -e "  ${GREEN}✓${NC} SLSsteam" || echo -e "  ${RED}✗${NC} SLSsteam ${YELLOW}(required for patching)${NC}"
 
 ACCELA_STATUS=false
