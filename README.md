@@ -96,7 +96,6 @@ LuaTools discovers Steam and related tools at these locations:
 | Component | Path |
 |-----------|------|
 | Steam root | `~/.steam/steam` or `~/.local/share/Steam` |
-| Lua scripts | `{steam_root}/config/stplug-in/*.lua` |
 | Depot manifests | `{steam_root}/depotcache/*.manifest` |
 | SLSsteam binary | `~/.local/share/SLSsteam/SLSsteam.so` |
 | SLSsteam config | `~/.config/SLSsteam/config.yaml` |
