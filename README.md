@@ -35,7 +35,7 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 
 **One-liner:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/StarWarsK/luatools/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/StarWarsK/LuaToolsLinux/main/install.sh | bash
 ```
 
 <details>
