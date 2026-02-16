@@ -4,6 +4,10 @@
 
 This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](https://github.com/AceSLS/SLSsteam) and [ACCELA](https://github.com/ciscosweater/enter-the-wired) instead of the Windows-only SteamTools.
 
+## NOTE
+
+- **This Port is in EARLY ACCESS** - Do not expect a polished experience. Expect something that works (albeit messily). This plugin will improve overtime but basic functionality is operational. 
+
 ## Features
 
 - **Install your Favorite Games With the Press of a Button** - Click "Add via LuaTools" to install games via ACCELA without searching for a Manifest file Yourself!
