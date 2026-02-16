@@ -74,47 +74,51 @@ if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
         info "Installing 32-bit development libraries and dependencies for SLSsteam..."
         
         # Step 1: Enable i386 architecture
-        info "Step 1/3: Enabling 32-bit architecture..."
+        info "Step 1/4: Enabling 32-bit architecture..."
         sudo dpkg --add-architecture i386 2>/dev/null || true
         
         # Step 2: Update package lists
-        info "Step 2/3: Updating package lists..."
+        info "Step 2/4: Updating package lists..."
         if ! sudo apt update -qq 2>/tmp/apt_update.log; then
             warn "apt update had issues, but continuing..."
             cat /tmp/apt_update.log | grep -i "error\|failed" | head -5 || true
         fi
         
-        # Step 3: Install dependencies (split into groups for better error handling)
-        info "Step 3/3: Installing build dependencies..."
-        
-        # Install 64-bit essentials first
-        info "  Installing 64-bit compiler tools..."
+        # Step 3: Install compiler and build tools
+        info "Step 3/4: Installing compiler tools..."
         sudo apt install -y gcc-multilib g++-multilib
         
+        # Step 4: Install runtime and development libraries
+        info "Step 4/4: Installing development libraries (C, SSL, cURL)..."
+        
         # Install 32-bit C library
-        info "  Installing 32-bit C library..."
         sudo apt install -y libc6-dev-i386
         
-        # Install OpenSSL (most important)
-        info "  Installing OpenSSL development files..."
-        sudo apt install -y libssl-dev || {
-            warn "libssl-dev installation failed (64-bit), trying with -dev-i386..."
-            sudo apt install -y libssl-dev-i386 || warn "OpenSSL install failed"
+        # Install OpenSSL (64-bit)
+        sudo apt install -y libssl-dev || warn "64-bit OpenSSL install had issues"
+        
+        # Install 32-bit OpenSSL
+        sudo apt install -y libssl-dev:i386 2>/dev/null || warn "32-bit OpenSSL optional"
+        
+        # Install cURL - THIS IS CRITICAL
+        info "  Installing cURL development headers (64-bit)..."
+        if ! sudo apt install -y libcurl4-openssl-dev; then
+            warn "libcurl4-openssl-dev failed, trying alternative package..."
+            sudo apt install -y libcurl4 libcurl3-dev 2>/dev/null || true
+        fi
+        
+        # Try to install 32-bit cURL
+        info "  Installing cURL development headers (32-bit)..."
+        sudo apt install -y libcurl4-openssl-dev:i386 2>/dev/null || {
+            warn "32-bit cURL from openssl failed, trying alternatives..."
+            sudo apt install -y libcurl4:i386 2>/dev/null || warn "32-bit cURL optional, will try to build anyway"
         }
-        
-        # Try to install 32-bit OpenSSL
-        info "  Installing 32-bit OpenSSL..."
-        sudo apt install -y libssl-dev:i386 2>/dev/null || warn "32-bit OpenSSL optional, continuing..."
-        
-        # Install cURL (optional but useful)
-        info "  Installing cURL development files..."
-        sudo apt install -y libcurl4-openssl-dev 2>/dev/null || warn "libcurl install optional, continuing..."
         
         ok "Build dependencies installation complete"
         rm -f /tmp/apt_update.log
     else
         info "32-bit development libraries not detected (required for SLSsteam)"
-        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386 libssl-dev${NC}"
+        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386 libssl-dev libcurl4-openssl-dev${NC}"
     fi
 fi
 
