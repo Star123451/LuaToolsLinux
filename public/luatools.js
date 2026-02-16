@@ -3581,12 +3581,18 @@
         const currentUrl = window.location.href;
         if (currentUrl !== lastUrl) {
             lastUrl = currentUrl;
-            // URL changed - reset flags and update buttons
+            // URL changed - reset flags and remove old buttons
             window.__LuaToolsButtonInserted = false;
             window.__LuaToolsRestartInserted = false;
             window.__LuaToolsIconInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
+            try {
+                var old = document.querySelectorAll('.luatools-button, .luatools-restart-button, .luatools-icon-button, .luatools-proton-btn, #luatools-main-wrapper, #luatools-workshop-btn');
+                for (var i = 0; i < old.length; i++) { try { old[i].remove(); } catch (_) { } }
+            } catch (_) { }
+            logState.existsOnce = false;
+            logState.missingOnce = false;
             // Update translations and re-add buttons
             ensureTranslationsLoaded(false).then(function () {
                 updateButtonTranslations();
@@ -3805,11 +3811,20 @@
             window.__LuaToolsIconInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
+            // Remove old buttons from previous page so they get re-created
+            try {
+                var old = document.querySelectorAll('.luatools-button, .luatools-restart-button, .luatools-icon-button, .luatools-proton-btn, #luatools-main-wrapper, #luatools-workshop-btn');
+                for (var i = 0; i < old.length; i++) { try { old[i].remove(); } catch (_) { } }
+            } catch (_) { }
+            // Reset log guards so logs fire again for new page
+            logState.existsOnce = false;
+            logState.missingOnce = false;
             ensureTranslationsLoaded(false).then(function () {
                 updateButtonTranslations();
                 addLuaToolsButton();
                 addWorkshopButton();
             });
+            return; // Don't fall through — wait for the async re-call
         }
 
         const steamdbContainer = document.querySelector('.steamdb-buttons') || document.querySelector('[data-steamdb-buttons]') || document.querySelector('.apphub_OtherSiteInfo');

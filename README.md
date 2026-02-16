@@ -2,7 +2,7 @@
 
 > A [Millennium](https://steambrew.app) plugin that downloads game manifest files for Steam on Linux.
 
-**By [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)**
+**By [StarWarsK](https://github.com/Star123451) & geovanygrdt**
 
 This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](https://github.com/AceSLS/SLSsteam) and [ACCELA](https://github.com/ciscosweater/enter-the-wired) instead of the Windows-only SteamTools.
 
@@ -104,7 +104,7 @@ LuaTools discovers Steam and related tools at these locations:
 
 ## Credits
 
-- **LuaTools (Linux)** — by [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)
+- **LuaTools (Linux)** — by [StarWarsK](https://github.com/Star123451) & geovanygrdt
 - **LuaTools** — original plugin by [madoiscool](https://github.com/madoiscool)
 - **SLSsteam** — by [AceSLS](https://github.com/AceSLS/SLSsteam)
 - **ACCELA / Enter The Wired** — by [ciscosweater](https://github.com/ciscosweater/enter-the-wired)
