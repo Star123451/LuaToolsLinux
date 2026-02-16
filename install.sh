@@ -117,12 +117,28 @@ install_slssteam() {
         if 7z x SLSsteam-Any.7z > /dev/null 2>&1; then
             ok "Extracted SLSsteam"
             
-            # Run setup.sh install
-            if [ -d "SLSsteam" ]; then
+            # Find setup.sh - it might be in current dir or a subdirectory
+            local setup_script=""
+            if [ -f "setup.sh" ]; then
+                setup_script="./setup.sh"
+            elif [ -f "SLSsteam/setup.sh" ]; then
                 cd SLSsteam
+                setup_script="./setup.sh"
+            else
+                # Search for setup.sh in extracted files
+                setup_script=$(find . -name "setup.sh" -type f | head -1)
+                if [ -n "$setup_script" ]; then
+                    setup_dir=$(dirname "$setup_script")
+                    cd "$setup_dir"
+                    setup_script="./setup.sh"
+                fi
+            fi
+            
+            # Run setup.sh if found
+            if [ -n "$setup_script" ] && [ -f "$setup_script" ]; then
                 info "  Running SLSsteam setup..."
                 
-                if bash setup.sh install; then
+                if bash "$setup_script" install; then
                     ok "SLSsteam installed successfully"
                     cd /
                     rm -rf "$temp_dir"
@@ -134,7 +150,9 @@ install_slssteam() {
                     return 1
                 fi
             else
-                warn "SLSsteam directory not found after extraction"
+                warn "setup.sh not found in extracted files"
+                echo -e "  ${YELLOW}Contents of extraction:${NC}"
+                ls -la "$temp_dir" | head -15
                 cd /
                 rm -rf "$temp_dir"
                 return 1
