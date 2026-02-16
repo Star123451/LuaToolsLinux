@@ -47,7 +47,7 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
    pip install -r ~/.local/share/millennium/plugins/luatools/requirements.txt
    ```
    
-6. Restart Steam — LuaTools will load automatically via Millennium.
+6. Restart SLSsteam — LuaTools will load automatically via Millennium.
 
 ## Project Structure
 
