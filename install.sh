@@ -68,24 +68,38 @@ if ! command -v pkg-config &>/dev/null; then
     fi
 fi
 
-# --- Check and install 32-bit libraries (required for SLSsteam) ---
+# --- Check and install 32-bit libraries and dependencies (required for SLSsteam) ---
 if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
     if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-        info "Installing 32-bit development libraries (required for SLSsteam)..."
-        # Install all required 32-bit dependencies in one command
-        sudo apt install -y gcc-multilib g++-multilib libc6-dev-i386 2>&1 | tee /tmp/multilib_install.log
+        info "Installing 32-bit development libraries and dependencies (required for SLSsteam)..."
         
-        if grep -q "conflicting" /tmp/multilib_install.log; then
-            warn "Multilib conflicts detected - trying alternative approach..."
-            # If conflicts occur, try installing just the essentials
-            sudo apt install -y libc6-dev-i386 pkg-config
+        # Enable i386 architecture for 32-bit libraries
+        sudo dpkg --add-architecture i386 2>/dev/null || true
+        sudo apt update -qq
+        
+        # Install all required dependencies
+        info "Installing build dependencies (this may take a moment)..."
+        sudo apt install -y \
+            gcc-multilib \
+            g++-multilib \
+            libc6-dev-i386 \
+            libssl-dev \
+            libssl-dev:i386 \
+            libcurl4-openssl-dev \
+            libcurl4-openssl-dev:i386 \
+            2>&1 | tee /tmp/deps_install.log
+        
+        if grep -q "Unable to locate\|conflicting\|not found" /tmp/deps_install.log; then
+            warn "Some packages may have failed - trying minimal set..."
+            # Fallback to essentials only
+            sudo apt install -y libc6-dev-i386 libssl-dev pkg-config
         fi
         
-        ok "32-bit libraries installed"
-        rm -f /tmp/multilib_install.log
+        ok "Build dependencies installed"
+        rm -f /tmp/deps_install.log
     else
         info "32-bit development libraries not detected (required for SLSsteam)"
-        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386${NC}"
+        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386 libssl-dev${NC}"
     fi
 fi
 
