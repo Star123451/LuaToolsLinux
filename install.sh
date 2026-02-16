@@ -109,7 +109,7 @@ install_slssteam() {
     
     # Download latest SLSsteam release
     cd "$temp_dir"
-    if curl -fsSL -o SLSsteam-Any.7z "https://github.com/AceSLS/SLSsteam/releases/download/latest/SLSsteam-Any.7z" 2>&1; then
+    if curl -fsSL -o SLSsteam-Any.7z "https://github.com/AceSLS/SLSsteam/releases/download/20260122094411/SLSsteam-Any.7z" 2>&1; then
         ok "Downloaded SLSsteam"
         
         # Extract
