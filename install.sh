@@ -56,71 +56,15 @@ if ! command -v make &>/dev/null || ! command -v gcc &>/dev/null; then
     fi
 fi
 
-# --- Check and install pkg-config (required for SLSsteam) ---
-if ! command -v pkg-config &>/dev/null; then
-    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-        info "Installing pkg-config..."
-        sudo apt install -y pkg-config
-        ok "pkg-config installed"
-    else
-        warn "pkg-config not found - needed for SLSsteam"
-        echo -e "  Install with: ${CYAN}sudo apt install pkg-config${NC}"
+# --- Check for 32-bit support and enable if needed ---
+if ! dpkg --print-foreign-architectures 2>/dev/null | grep -q "i386"; then
+    if command -v sudo &>/dev/null && command -v dpkg &>/dev/null; then
+        info "Enabling 32-bit architecture support..."
+        sudo dpkg --add-architecture i386 && sudo apt update -qq
     fi
 fi
 
-# --- Check and install 32-bit libraries and dependencies (required for SLSsteam) ---
-if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
-    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-        info "Installing 32-bit development libraries and dependencies for SLSsteam..."
-        
-        # Step 1: Enable i386 architecture
-        info "Step 1/4: Enabling 32-bit architecture..."
-        sudo dpkg --add-architecture i386 2>/dev/null || true
-        
-        # Step 2: Update package lists
-        info "Step 2/4: Updating package lists..."
-        if ! sudo apt update -qq 2>/tmp/apt_update.log; then
-            warn "apt update had issues, but continuing..."
-            cat /tmp/apt_update.log | grep -i "error\|failed" | head -5 || true
-        fi
-        
-        # Step 3: Install compiler and build tools
-        info "Step 3/4: Installing compiler tools..."
-        sudo apt install -y gcc-multilib g++-multilib
-        
-        # Step 4: Install runtime and development libraries
-        info "Step 4/4: Installing development libraries (C, SSL, cURL)..."
-        
-        # Install 32-bit C library
-        sudo apt install -y libc6-dev-i386
-        
-        # Install OpenSSL (64-bit)
-        sudo apt install -y libssl-dev || warn "64-bit OpenSSL install had issues"
-        
-        # Install 32-bit OpenSSL
-        sudo apt install -y libssl-dev:i386 2>/dev/null || warn "32-bit OpenSSL optional"
-        
-        # Install cURL - THIS IS CRITICAL
-        info "  Installing cURL development headers (64-bit)..."
-        if ! sudo apt install -y libcurl4-openssl-dev; then
-            warn "libcurl4-openssl-dev failed, trying alternative package..."
-            sudo apt install -y libcurl4 libcurl3-dev 2>/dev/null || true
-        fi
-        
-        # Try to install 32-bit cURL
-        info "  Installing cURL development headers (32-bit)..."
-        sudo apt install -y libcurl4-openssl-dev:i386 2>/dev/null || {
-            warn "32-bit cURL from openssl failed, trying alternatives..."
-            sudo apt install -y libcurl4:i386 2>/dev/null || warn "32-bit cURL optional, will try to build anyway"
-        }
-        
-        ok "Build dependencies installation complete"
-        rm -f /tmp/apt_update.log
-    else
-        info "32-bit development libraries not detected (required for SLSsteam)"
-        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386 libssl-dev libcurl4-openssl-dev${NC}"
-    fi
-fi
+info "Note: SLSsteam build script will install any additional dependencies as needed"
 
 # --- Install Millennium if not found ---
 install_millennium() {
@@ -145,7 +89,7 @@ install_slssteam() {
     info "Installing SLSsteam..."
     local slssteam_dir="$HOME/.local/share/SLSsteam"
     
-    # Clone and build
+    # Clone the repository
     local temp_dir=$(mktemp -d)
     info "  Working in: $temp_dir"
     cd "$temp_dir"
@@ -160,33 +104,46 @@ install_slssteam() {
     
     cd SLSsteam
     
-    # Build SLSsteam
-    info "  Compiling SLSsteam (this may take a few minutes)..."
-    if make 2>&1 | tee /tmp/slssteam_build.log; then
-        info "  Build successful, installing..."
-        mkdir -p "$slssteam_dir"
-        
-        if [ -f "SLSsteam.so" ]; then
-            cp SLSsteam.so "$slssteam_dir/"
-            chmod +x "$slssteam_dir/SLSsteam.so"
+    # Check if there's an install.sh script in the repo
+    if [ -f "install.sh" ]; then
+        info "Running SLSsteam's install script..."
+        if bash install.sh; then
+            ok "SLSsteam installed successfully"
             cd /
             rm -rf "$temp_dir"
-            ok "SLSsteam installed to $slssteam_dir"
             return 0
         else
-            warn "SLSsteam.so not found after build"
+            warn "SLSsteam's install script failed"
             cd /
             rm -rf "$temp_dir"
             return 1
         fi
     else
-        warn "SLSsteam build failed"
-        echo ""
-        echo -e "${YELLOW}Build errors:${NC}"
-        tail -20 /tmp/slssteam_build.log | grep -i "error\|undefined" | head -10 || echo "See /tmp/slssteam_build.log for details"
-        cd /
-        rm -rf "$temp_dir"
-        return 1
+        # Fallback to manual build
+        info "No install.sh found, attempting manual build..."
+        if make; then
+            info "Build successful, installing..."
+            mkdir -p "$slssteam_dir"
+            
+            if [ -f "SLSsteam.so" ]; then
+                cp SLSsteam.so "$slssteam_dir/"
+                chmod +x "$slssteam_dir/SLSsteam.so"
+                cd /
+                rm -rf "$temp_dir"
+                ok "SLSsteam installed to $slssteam_dir"
+                return 0
+            else
+                warn "SLSsteam.so not found after build"
+                cd /
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        else
+            warn "SLSsteam build failed"
+            cd /
+            rm -rf "$temp_dir"
+            return 1
+        fi
     fi
 }
 
