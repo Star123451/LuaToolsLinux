@@ -44,10 +44,31 @@ if ! command -v curl &>/dev/null; then
     echo -e "  Install with: ${CYAN}sudo apt install curl${NC}"
 fi
 
-# --- Check for build tools (needed for SLSsteam) ---
+# --- Check and install build tools (needed for SLSsteam) ---
 if ! command -v make &>/dev/null || ! command -v gcc &>/dev/null; then
-    info "Build tools (make/gcc) not found - needed for SLSsteam installation"
-    echo -e "  You can install them with: ${CYAN}sudo apt install build-essential${NC}"
+    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
+        info "Installing build-essential..."
+        sudo apt update -qq && sudo apt install -y build-essential
+        ok "Build tools installed"
+    else
+        warn "Build tools (make/gcc) not found - needed for SLSsteam"
+        echo -e "  Install with: ${CYAN}sudo apt install build-essential${NC}"
+    fi
+fi
+
+# --- Check and install 32-bit libraries (required for SLSsteam) ---
+if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
+    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
+        info "Installing 32-bit development libraries (required for SLSsteam)..."
+        if sudo apt install -y gcc-multilib g++-multilib 2>&1 | grep -q "conflicting"; then
+            warn "gcc-multilib conflicts detected - continuing anyway (may affect SLSsteam build)"
+        else
+            ok "32-bit libraries installed"
+        fi
+    else
+        info "32-bit development libraries not detected (required for SLSsteam)"
+        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib${NC}"
+    fi
 fi
 
 # --- Install Millennium if not found ---
@@ -73,19 +94,14 @@ install_slssteam() {
     info "Installing SLSsteam..."
     local slssteam_dir="$HOME/.local/share/SLSsteam"
     
-    # Check for required build tools
-    if ! command -v make &>/dev/null; then
-        warn "make not found - required to build SLSsteam"
-        echo -e "  Install with: ${CYAN}sudo apt install build-essential${NC}"
-        return 1
-    fi
-    
     # Clone and build
     local temp_dir=$(mktemp -d)
     cd "$temp_dir"
     
     if git clone https://github.com/AceSLS/SLSsteam.git; then
         cd SLSsteam
+        
+        # Build SLSsteam
         if make; then
             mkdir -p "$slssteam_dir"
             cp SLSsteam.so "$slssteam_dir/"
@@ -95,7 +111,7 @@ install_slssteam() {
             ok "SLSsteam installed to $slssteam_dir"
             return 0
         else
-            warn "SLSsteam build failed"
+            warn "SLSsteam build failed - check that all dependencies are installed"
             cd
             rm -rf "$temp_dir"
             return 1
