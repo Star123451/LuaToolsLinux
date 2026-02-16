@@ -100,6 +100,10 @@ LuaTools discovers Steam and related tools at these locations:
 - **Millennium** — by [SteamClientHomebrew](https://github.com/SteamClientHomebrew/Millennium)
 - **dont forget star** - hes cool :D
 
+## Contributing
+
+- **Make a pull request with a clear explanation** - If you are even somewhat competant, there is a good chance I will accept it.
+
 ## License
 
 See the original LuaTools repository for license information.
