@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # ============================================
 #  LuaTools (Linux) Installer
@@ -290,30 +290,56 @@ fi
 
 ok "LuaTools installation complete"
 
-# --- Install/Reinstall SLSsteam ---
+# --- Install SLSsteam (only if not found, or ask to reinstall) ---
 echo ""
-if [ -f "$HOME/.local/share/SLSsteam/SLSsteam.so" ]; then
-    info "SLSsteam detected - reinstalling to ensure it's working..."
-    rm -rf "$HOME/.local/share/SLSsteam"
-else
-    info "SLSsteam not found - installing..."
-fi
-install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
-
-# --- Install/Reinstall ACCELA ---
-ACCELA_FOUND=false
-for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
-    if [ -d "$p" ]; then
-        info "ACCELA detected at $p - reinstalling to ensure it's working..."
-        rm -rf "$p"
-        ACCELA_FOUND=true
+SLSSTEAM_FOUND=false
+SLSSTEAM_PATH=""
+for p in "$HOME/.local/share/SLSsteam" "$HOME/SLSsteam" "/opt/SLSsteam"; do
+    if [ -f "$p/SLSsteam.so" ]; then
+        SLSSTEAM_FOUND=true
+        SLSSTEAM_PATH="$p"
         break
     fi
 done
-if [ "$ACCELA_FOUND" = false ]; then
-    info "ACCELA not found - installing..."
+if [ "$SLSSTEAM_FOUND" = true ]; then
+    ok "SLSsteam is already installed at $SLSSTEAM_PATH."
+    read -rp "  Do you want to redownload/reinstall SLSsteam? [y/N] " REINSTALL_SLS
+    if [[ "${REINSTALL_SLS,,}" == "y" ]]; then
+        info "Reinstalling SLSsteam..."
+        rm -rf "$SLSSTEAM_PATH"
+        install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
+    else
+        info "Keeping existing SLSsteam installation."
+    fi
+else
+    info "SLSsteam not found - installing..."
+    install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
 fi
-install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
+
+# --- Install ACCELA (only if not found, or ask to reinstall) ---
+ACCELA_FOUND=false
+ACCELA_PATH=""
+for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
+    if [ -d "$p" ]; then
+        ACCELA_FOUND=true
+        ACCELA_PATH="$p"
+        break
+    fi
+done
+if [ "$ACCELA_FOUND" = true ]; then
+    ok "ACCELA is already installed at $ACCELA_PATH."
+    read -rp "  Do you want to redownload/reinstall ACCELA? [y/N] " REINSTALL_ACCELA
+    if [[ "${REINSTALL_ACCELA,,}" == "y" ]]; then
+        info "Reinstalling ACCELA..."
+        rm -rf "$ACCELA_PATH"
+        install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
+    else
+        info "Keeping existing ACCELA installation."
+    fi
+else
+    info "ACCELA not found - installing..."
+    install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
+fi
 
 # --- Done ---
 echo ""
@@ -334,7 +360,15 @@ if [ -d "$HOME/.local/share/Steam/steamui/skins" ] || [ -d "$HOME/.steam/steam/s
 else
     echo -e "  ${RED}✗${NC} Millennium ${YELLOW}(required - please restart Steam after install)${NC}"
 fi
-[ -f "$HOME/.local/share/SLSsteam/SLSsteam.so" ] && echo -e "  ${GREEN}✓${NC} SLSsteam" || echo -e "  ${RED}✗${NC} SLSsteam ${YELLOW}(required for patching)${NC}"
+SLSSTEAM_STATUS=false
+for p in "$HOME/.local/share/SLSsteam" "$HOME/SLSsteam" "/opt/SLSsteam"; do
+    if [ -f "$p/SLSsteam.so" ]; then
+        echo -e "  ${GREEN}✓${NC} SLSsteam (at $p)"
+        SLSSTEAM_STATUS=true
+        break
+    fi
+done
+[ "$SLSSTEAM_STATUS" = false ] && echo -e "  ${RED}✗${NC} SLSsteam ${YELLOW}(required for patching)${NC}"
 
 ACCELA_STATUS=false
 for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do

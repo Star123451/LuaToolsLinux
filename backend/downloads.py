@@ -234,6 +234,7 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
     """
     import subprocess
     import shutil
+    from linux_platform import get_accela_dir
 
     run_script = get_accela_run_script()
     if not run_script:
@@ -248,22 +249,24 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         # Make sure run.sh is executable
         os.chmod(run_script, 0o755)
 
+        # Use the ACCELA directory as the working directory so ACCELA
+        # can correctly detect its own path and resources.
+        accela_dir = get_accela_dir() or os.path.dirname(run_script)
+
         cmd = [run_script, zip_path]
-        logger.log(f"LuaTools: Launching ACCELA for appid={appid}: {' '.join(cmd)}")
-        print(f"DEBUG_LT: Launching ACCELA command: {cmd}")
+        logger.log(f"LuaTools: Launching ACCELA for appid={appid}: {' '.join(cmd)} (cwd={accela_dir})")
 
         subprocess.Popen(
             cmd,
+            cwd=accela_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # detach from our process tree
         )
         logger.log(f"LuaTools: ACCELA launched successfully for appid={appid}")
-        print(f"DEBUG_LT: ACCELA launch success")
         return True
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to launch ACCELA: {exc}")
-        print(f"DEBUG_LT: ACCELA launch failed: {exc}")
         return False
 
 
@@ -700,9 +703,7 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
     # Launch ACCELA with the zip so it can download actual game content.
     # The zip is kept alive for ACCELA; it will manage its own cleanup.
     accela_launched = _launch_accela_download(appid, zip_path)
-    print(f"DEBUG_LT: _launch_accela_download returned {accela_launched}")
     if not accela_launched:
-        print(f"DEBUG_LT: cleaning up zip because ACCELA launch failed")
         # ACCELA not available – clean up the zip ourselves
         try:
             os.remove(zip_path)

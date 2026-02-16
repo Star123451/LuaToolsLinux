@@ -61,7 +61,19 @@ def get_depotcache_dir(steam_root: Optional[str] = None) -> Optional[str]:
 # SLSsteam paths
 # ---------------------------------------------------------------------------
 
+_SLSSTEAM_CANDIDATES = [
+    os.path.expanduser("~/.local/share/SLSsteam"),
+    os.path.expanduser("~/SLSsteam"),
+    "/opt/SLSsteam",
+]
+
+
 def get_slssteam_install_dir() -> str:
+    """Return the SLSsteam installation directory if found, else the default path."""
+    for path in _SLSSTEAM_CANDIDATES:
+        if os.path.isdir(path) and os.path.isfile(os.path.join(path, "SLSsteam.so")):
+            return path
+    # Default path when no valid installation is found
     return os.path.expanduser("~/.local/share/SLSsteam")
 
 
@@ -74,9 +86,12 @@ def get_slssteam_config_path() -> str:
 
 
 def check_slssteam_installed() -> bool:
-    """Return *True* if ``SLSsteam.so`` exists in the install dir."""
-    so_path = os.path.join(get_slssteam_install_dir(), "SLSsteam.so")
-    return os.path.isfile(so_path)
+    """Return *True* if ``SLSsteam.so`` exists in any known install dir."""
+    for path in _SLSSTEAM_CANDIDATES:
+        so_path = os.path.join(path, "SLSsteam.so")
+        if os.path.isfile(so_path):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +149,11 @@ def open_directory(path: str) -> None:
 # SLSsteam injection verification
 # ---------------------------------------------------------------------------
 
-_LD_AUDIT_LINE = 'export LD_AUDIT=$HOME/.local/share/SLSsteam/library-inject.so:$HOME/.local/share/SLSsteam/SLSsteam.so'
+
+def _get_ld_audit_line() -> str:
+    """Build the LD_AUDIT export line using the detected SLSsteam install dir."""
+    sls_dir = get_slssteam_install_dir()
+    return f'export LD_AUDIT={sls_dir}/library-inject.so:{sls_dir}/SLSsteam.so'
 
 
 def verify_slssteam_injected() -> dict:
@@ -169,9 +188,10 @@ def verify_slssteam_injected() -> dict:
 
     # Patch: insert the export at line 10 (matching SLSsteam installer)
     try:
+        ld_audit_line = _get_ld_audit_line()
         lines = content.splitlines(keepends=True)
         insert_pos = min(9, len(lines))  # line 10 (0-indexed = 9)
-        lines.insert(insert_pos, _LD_AUDIT_LINE + "\n")
+        lines.insert(insert_pos, ld_audit_line + "\n")
         with open(steam_sh, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return {"patched": True, "already_ok": False, "error": None}

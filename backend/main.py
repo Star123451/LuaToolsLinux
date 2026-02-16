@@ -95,6 +95,7 @@ from settings.manager import (
     get_translation_map,
 )
 from steam_utils import detect_steam_install_path, get_game_install_path_response, open_game_folder
+from linux_platform import get_slssteam_config_path
 
 logger = shared_logger
 
@@ -141,7 +142,7 @@ def load_workshop_tool_path():
 def AddFakeAppId(appid: int, contentScriptQuery: str = "") -> str:
     """Adds the line 'APPID: 480' to the FakeAppIds section in config.yaml."""
     try:
-        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        config_path = get_slssteam_config_path()
 
         if not os.path.exists(config_path):
             try:
@@ -191,7 +192,7 @@ def AddFakeAppId(appid: int, contentScriptQuery: str = "") -> str:
 def RemoveFakeAppId(appid: int) -> None:
     """Surgically removes the FakeAppId line for this game."""
     try:
-        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        config_path = get_slssteam_config_path()
         if not os.path.exists(config_path): return
 
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -230,7 +231,7 @@ def AddGameToken(appid: int, contentScriptQuery: str = "") -> str:
         if not os.path.exists(json_path):
             json_path = os.path.join(plugin_root, "appaccesstokens.json")
 
-        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        config_path = get_slssteam_config_path()
 
         if not os.path.exists(json_path):
             return json.dumps({"success": False, "error": "appaccesstokens.json not found."})
@@ -289,7 +290,7 @@ def AddGameToken(appid: int, contentScriptQuery: str = "") -> str:
 def RemoveGameToken(appid: int) -> None:
     """Remove the token line for this AppID from config.yaml."""
     try:
-        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        config_path = get_slssteam_config_path()
         if not os.path.exists(config_path): return
 
         with open(config_path, 'r', encoding='utf-8') as f:

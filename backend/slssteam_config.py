@@ -119,3 +119,8 @@ def set_safe_mode(enabled: bool) -> None:
 def config_exists() -> bool:
     """Return *True* if the SLSsteam config file exists on disk."""
     return os.path.isfile(get_slssteam_config_path())
+
+
+def get_sls_version() -> Optional[str]:
+    """Return the SLSsteam version string from config, or None if unavailable."""
+    return get_value("Version", None)
