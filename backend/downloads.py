@@ -6,9 +6,10 @@ import base64
 import json
 import os
 import re
+import subprocess
 import threading
 import time
-from typing import Dict
+from typing import Any, Dict
 
 import Millennium  # type: ignore
 
@@ -46,6 +47,184 @@ APPLIST_LOCK = threading.Lock()
 APPLIST_FILE_NAME = "all-appids.json"
 APPLIST_URL = "https://applist.morrenus.xyz/"
 APPLIST_DOWNLOAD_TIMEOUT = 300  # 5 minutes for large file
+
+# --- STATUS PILL: Games Database Config ---
+GAMES_DB_FILE_NAME = "games.json"
+GAMES_DB_URL = "https://toolsdb.piqseu.cc/games.json"
+
+# In-memory games database cache and lock
+GAMES_DB_DATA: Dict[str, Any] = {}
+GAMES_DB_LOADED = False
+GAMES_DB_LOCK = threading.Lock()
+
+
+# ==========================================
+#  RYUU COOKIE & MORRENUS KEY MANAGEMENT
+# ==========================================
+
+def _get_cookie_path() -> str:
+    """Return path to the Ryuu cookie file."""
+    return os.path.join(os.path.dirname(__file__), "data", "ryuu_cookie.txt")
+
+
+def _get_api_json_path() -> str:
+    """Return path to api.json."""
+    return os.path.join(os.path.dirname(__file__), "api.json")
+
+
+def load_ryu_cookie() -> str:
+    """Read the Ryuu cookie from file. Returns empty string if not found."""
+    try:
+        path = _get_cookie_path()
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception as e:
+        logger.warn(f"LuaTools: Error reading Ryuu cookie: {e}")
+    return ""
+
+
+def save_ryu_cookie(cookie_content: str) -> str:
+    """Save the Ryuu cookie from the frontend to ryuu_cookie.txt."""
+    try:
+        path = _get_cookie_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        clean_cookie = cookie_content.strip()
+        # Ensure cookie starts with 'session=' if user only pasted the hash
+        if clean_cookie and not clean_cookie.startswith("session="):
+            clean_cookie = f"session={clean_cookie}"
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(clean_cookie)
+
+        logger.log(f"LuaTools: Ryuu cookie saved (length: {len(clean_cookie)})")
+        return json.dumps({"success": True, "message": "Cookie saved successfully!"})
+    except Exception as e:
+        logger.error(f"LuaTools: Error saving Ryuu cookie: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def update_morrenus_key(key_content: str) -> str:
+    """Update the Morrenus API key in api.json."""
+    try:
+        path = _get_api_json_path()
+        key_content = key_content.strip()
+
+        if not key_content:
+            return json.dumps({"success": False, "error": "Key cannot be empty."})
+
+        root_data = {"api_list": []}
+
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                try:
+                    content = f.read()
+                    if content.strip():
+                        root_data = json.loads(content)
+                except json.JSONDecodeError:
+                    root_data = {"api_list": []}
+
+        if "api_list" not in root_data:
+            root_data["api_list"] = []
+
+        api_list = root_data["api_list"]
+        found = False
+
+        new_url = f"https://manifest.morrenus.xyz/api/v1/manifest/<appid>?api_key={key_content}"
+
+        for api in api_list:
+            if "morrenus" in api.get("name", "").lower() or "morrenus.xyz" in api.get("url", ""):
+                api["url"] = new_url
+                api["enabled"] = True
+                found = True
+                break
+
+        if not found:
+            new_entry = {
+                "name": "Morrenus (Official ACCELA)",
+                "url": new_url,
+                "success_code": 200,
+                "unavailable_code": 404,
+                "enabled": True
+            }
+            api_list.insert(0, new_entry)
+
+        root_data["api_list"] = api_list
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(root_data, f, indent=4)
+
+        return json.dumps({"success": True, "message": "Morrenus key updated successfully!"})
+
+    except Exception as e:
+        logger.error(f"LuaTools: Error updating Morrenus key: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# ==========================================
+#  LAUNCHER PATH CONFIG
+# ==========================================
+
+def _get_launcher_path_file() -> str:
+    """Return the path to the launcher path config file."""
+    return os.path.join(os.path.dirname(__file__), "data", "launcher_path.txt")
+
+
+def load_launcher_path() -> str:
+    """Read the saved launcher path. Returns Bifrost default if not set."""
+    default_path = os.path.expanduser("~/.local/share/Bifrost/bin/Bifrost")
+    try:
+        path_file = _get_launcher_path_file()
+        if os.path.exists(path_file):
+            with open(path_file, "r", encoding="utf-8") as f:
+                saved_path = f.read().strip()
+                if saved_path:
+                    return saved_path
+    except Exception as e:
+        logger.warn(f"LuaTools: Error reading launcher path: {e}")
+    return default_path
+
+
+def save_launcher_path_config(path: str) -> str:
+    """Save the user-chosen launcher path."""
+    try:
+        path_file = _get_launcher_path_file()
+        os.makedirs(os.path.dirname(path_file), exist_ok=True)
+
+        clean_path = path.strip()
+        with open(path_file, "w", encoding="utf-8") as f:
+            f.write(clean_path)
+
+        logger.log(f"LuaTools: Launcher path saved: {clean_path}")
+        return json.dumps({"success": True, "path": clean_path})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def browse_for_launcher() -> str:
+    """Open a native Linux file picker (Zenity) to choose the launcher executable."""
+    try:
+        cmd = [
+            'zenity',
+            '--file-selection',
+            '--title=Select Launcher Executable (e.g. Bifrost)',
+            '--filename=' + os.path.expanduser("~/.local/share/")
+        ]
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+
+        if process.returncode == 0:
+            selected_path = stdout.decode('utf-8').strip()
+            return json.dumps({"success": True, "path": selected_path})
+        else:
+            return json.dumps({"success": False, "error": "No file selected or user cancelled"})
+
+    except Exception as e:
+        logger.error(f"LuaTools: File picker error: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
 
 
 def _launch_accela_download(appid: int, zip_path: str) -> bool:
@@ -394,6 +573,83 @@ def fetch_app_name(appid: int) -> str:
     return _fetch_app_name(appid)
 
 
+# --- START GAMES DB LOGIC ---
+
+def _games_db_file_path() -> str:
+    """Get the path to the games database JSON file."""
+    temp_dir = ensure_temp_download_dir()
+    return os.path.join(temp_dir, GAMES_DB_FILE_NAME)
+
+
+def _load_games_db_into_memory() -> None:
+    """Load the games database JSON file into memory."""
+    global GAMES_DB_DATA, GAMES_DB_LOADED
+
+    with GAMES_DB_LOCK:
+        if GAMES_DB_LOADED:
+            return
+
+        file_path = _games_db_file_path()
+        if not os.path.exists(file_path):
+            logger.log("LuaTools: Games DB file not found, skipping load")
+            GAMES_DB_LOADED = True
+            return
+
+        try:
+            logger.log("LuaTools: Loading Games DB into memory...")
+            with open(file_path, "r", encoding="utf-8") as handle:
+                GAMES_DB_DATA = json.load(handle)
+
+            logger.log(f"LuaTools: Loaded Games DB ({len(GAMES_DB_DATA)} entries)")
+            GAMES_DB_LOADED = True
+        except Exception as exc:
+            logger.warn(f"LuaTools: Failed to load Games DB: {exc}")
+            GAMES_DB_LOADED = True
+
+
+def _ensure_games_db_file() -> None:
+    """Download the games database file."""
+    file_path = _games_db_file_path()
+
+    logger.log("LuaTools: Downloading Games DB...")
+    client = ensure_http_client("LuaTools: DownloadGamesDB")
+
+    try:
+        logger.log(f"LuaTools: Downloading Games DB from {GAMES_DB_URL}")
+        resp = client.get(GAMES_DB_URL, follow_redirects=True, timeout=60)
+        logger.log(f"LuaTools: Games DB download response: status={resp.status_code}")
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        with open(file_path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle)
+
+        logger.log("LuaTools: Successfully downloaded Games DB")
+    except Exception as exc:
+        logger.warn(f"LuaTools: Failed to download Games DB: {exc}")
+
+
+def init_games_db() -> None:
+    """Initialize the games database: download if needed, then load into memory."""
+    try:
+        _ensure_games_db_file()
+        _load_games_db_into_memory()
+    except Exception as exc:
+        logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
+
+
+def get_games_database() -> str:
+    """Get the games database as JSON string."""
+    if not GAMES_DB_LOADED:
+        init_games_db()
+
+    with GAMES_DB_LOCK:
+        return json.dumps(GAMES_DB_DATA)
+
+# --- END GAMES DB LOGIC ---
+
+
 def _process_and_install_lua(appid: int, zip_path: str) -> None:
     """Process downloaded zip and install lua file into stplug-in directory."""
     import zipfile
@@ -488,15 +744,35 @@ def _download_zip_for_app(appid: int):
         logger.log(f"LuaTools: Trying API '{name}' -> {url}")
         try:
             headers = {"User-Agent": USER_AGENT}
+
+            # --- RYUU COOKIE INJECTION ---
+            if "ryuu.lol" in url:
+                cookie_content = load_ryu_cookie()
+                if cookie_content:
+                    logger.log(f"LuaTools: Injecting Ryuu cookie for API '{name}'")
+                    headers["Cookie"] = cookie_content
+                    headers["Referer"] = "https://generator.ryuu.lol/"
+                    headers["Authority"] = "generator.ryuu.lol"
+                    headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+                    headers["Upgrade-Insecure-Requests"] = "1"
+                    headers["Sec-Fetch-Dest"] = "document"
+                    headers["Sec-Fetch-Mode"] = "navigate"
+                    headers["Sec-Fetch-Site"] = "same-origin"
+                else:
+                    logger.warn("LuaTools: Ryuu API detected but 'data/ryuu_cookie.txt' not found or empty!")
+            # -----------------------------
+
             if _is_download_cancelled(appid):
                 logger.log(f"LuaTools: Download cancelled before contacting API '{name}'")
                 return
-            with client.stream("GET", url, headers=headers, follow_redirects=True) as resp:
+            with client.stream("GET", url, headers=headers, follow_redirects=True, timeout=30) as resp:
                 code = resp.status_code
                 logger.log(f"LuaTools: API '{name}' status={code}")
                 if code == unavailable_code:
                     continue
                 if code != success_code:
+                    if "ryuu.lol" in url and (code == 403 or code == 401):
+                        logger.warn(f"LuaTools: Ryuu access denied ({code}). Check if the cookie has expired.")
                     continue
                 total = int(resp.headers.get("Content-Length", "0") or "0")
                 _set_download_state(appid, {"status": "downloading", "bytesRead": 0, "totalBytes": total})
@@ -531,6 +807,8 @@ def _download_zip_for_app(appid: int):
                             logger.warn(
                                 f"LuaTools: API '{name}' returned non-zip file (magic={magic.hex()}, size={file_size}, preview={content_preview[:50]})"
                             )
+                            if "Login required" in content_preview or "Sign in" in content_preview:
+                                logger.error("LuaTools: Ryuu site requested login. The cookie is invalid.")
                             try:
                                 os.remove(dest_path)
                             except Exception:
@@ -821,5 +1099,12 @@ __all__ = [
     "init_applist",
     "read_loaded_apps",
     "start_add_via_luatools",
+    "save_ryu_cookie",
+    "update_morrenus_key",
+    "save_launcher_path_config",
+    "load_launcher_path",
+    "browse_for_launcher",
+    "init_games_db",
+    "get_games_database",
 ]
 

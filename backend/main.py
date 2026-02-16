@@ -1,6 +1,9 @@
 import json
 import os
+import re
 import shutil
+import stat
+import subprocess
 import sys
 import webbrowser
 import threading
@@ -61,9 +64,19 @@ from downloads import (
     init_applist,
     read_loaded_apps,
     start_add_via_luatools,
+    # --- Friend's additions ---
+    save_ryu_cookie,
+    update_morrenus_key,
+    save_launcher_path_config,
+    load_launcher_path,
+    browse_for_launcher,
+    # --- Status pill ---
+    get_games_database,
+    init_games_db,
 )
 from fixes import (
     apply_game_fix,
+    apply_linux_native_fix,
     cancel_apply_fix,
     check_for_fixes,
     get_apply_fix_status,
@@ -84,6 +97,224 @@ from settings.manager import (
 from steam_utils import detect_steam_install_path, get_game_install_path_response, open_game_folder
 
 logger = shared_logger
+
+
+# ==========================================
+#  WORKSHOP TOOL CONFIG (DepotDownloader)
+# ==========================================
+
+def _get_workshop_config_file():
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.path.dirname(backend_dir)
+    data_dir = os.path.join(plugin_root, "data")
+
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    return os.path.join(data_dir, "workshop_path.txt")
+
+
+def save_workshop_tool_path(path: str):
+    try:
+        config_file = _get_workshop_config_file()
+        with open(config_file, 'w', encoding='utf-8') as f:
+            f.write(path.strip())
+        return {"success": True, "message": "Path saved"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def load_workshop_tool_path():
+    try:
+        config_file = _get_workshop_config_file()
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+
+# ==========================================
+#  FAKE APP ID MANAGEMENT
+# ==========================================
+
+def AddFakeAppId(appid: int, contentScriptQuery: str = "") -> str:
+    """Adds the line 'APPID: 480' to the FakeAppIds section in config.yaml."""
+    try:
+        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+
+        if not os.path.exists(config_path):
+            try:
+                os.makedirs(os.path.dirname(config_path), exist_ok=True)
+                with open(config_path, 'w') as f:
+                    f.write("FakeAppIds:\n")
+            except Exception:
+                return json.dumps({"success": False, "error": "Failed to create config.yaml"})
+
+        with open(config_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        entry_line = f"  {appid}: 480\n"
+
+        for line in lines:
+            if str(appid) in line and "480" in line:
+                return json.dumps({"success": True, "message": "FakeAppId is already configured!"})
+
+        new_lines = []
+        inserted = False
+        has_tag = False
+
+        for line in lines:
+            new_lines.append(line)
+            if line.strip().lower().startswith("fakeappids:"):
+                has_tag = True
+                new_lines.append(entry_line)
+                inserted = True
+
+        if not has_tag:
+            new_lines.append("\nFakeAppIds:\n")
+            new_lines.append(entry_line)
+        elif has_tag and not inserted:
+            new_lines.append(entry_line)
+
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+
+        logger.log(f"[LuaTools] FakeAppId 480 added for {appid}")
+        return json.dumps({"success": True, "message": f"FakeAppId (480) added for {appid}!"})
+
+    except Exception as e:
+        logger.error(f"[LuaTools] FakeAppId Error: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def RemoveFakeAppId(appid: int) -> None:
+    """Surgically removes the FakeAppId line for this game."""
+    try:
+        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        if not os.path.exists(config_path): return
+
+        with open(config_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        new_lines = []
+        modified = False
+        target_str = str(appid)
+
+        for line in lines:
+            stripped = line.strip()
+            if (stripped.startswith(f"{target_str}:") or stripped.startswith(f"'{target_str}':") or stripped.startswith(f'"{ target_str}":')) and "480" in stripped:
+                logger.log(f"[LuaTools] Removing FakeAppId for: {appid}")
+                modified = True
+                continue
+            new_lines.append(line)
+
+        if modified:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+    except Exception as e:
+        logger.warn(f"[LuaTools] Error cleaning FakeAppId: {e}")
+
+
+# ==========================================
+#  GAME TOKEN MANAGEMENT
+# ==========================================
+
+def AddGameToken(appid: int, contentScriptQuery: str = "") -> str:
+    """Look up the token for this app in appaccesstokens.json and add it to config.yaml."""
+    try:
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        plugin_root = os.path.dirname(backend_dir)
+        json_path = os.path.join(backend_dir, "appaccesstokens.json")
+
+        if not os.path.exists(json_path):
+            json_path = os.path.join(plugin_root, "appaccesstokens.json")
+
+        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+
+        if not os.path.exists(json_path):
+            return json.dumps({"success": False, "error": "appaccesstokens.json not found."})
+
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+        if not os.path.exists(config_path):
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write("AppTokens:\n")
+
+        token = None
+        with open(json_path, 'r', encoding='utf-8') as f:
+            tokens_db = json.load(f)
+
+        appid_str = str(appid)
+        token = tokens_db.get(appid_str)
+
+        if not token:
+            return json.dumps({"success": False, "error": f"Token not found for AppID {appid}."})
+
+        with open(config_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        entry = f"{appid}: {token}"
+        for line in lines:
+            if str(appid) in line and token in line:
+                return json.dumps({"success": True, "message": "Token is already in config.yaml."})
+
+        new_lines = []
+        inserted = False
+        has_tag = False
+
+        for line in lines:
+            new_lines.append(line)
+            if line.strip().startswith("AppTokens:"):
+                has_tag = True
+                new_lines.append(f"  {entry}\n")
+                inserted = True
+
+        if not has_tag:
+            new_lines.append("\nAppTokens:\n")
+            new_lines.append(f"  {entry}\n")
+        elif has_tag and not inserted:
+            new_lines.append(f"  {entry}\n")
+
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+
+        return json.dumps({"success": True, "message": f"Token added for AppID {appid}!"})
+
+    except Exception as e:
+        logger.error(f"[LuaTools] Token Error: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def RemoveGameToken(appid: int) -> None:
+    """Remove the token line for this AppID from config.yaml."""
+    try:
+        config_path = os.path.expanduser("~/.config/SLSsteam/config.yaml")
+        if not os.path.exists(config_path): return
+
+        with open(config_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        new_lines = []
+        token_removed = False
+        target_id_str = str(appid)
+
+        for line in lines:
+            stripped = line.strip()
+            if (stripped.startswith(f"{target_id_str}:") or
+                stripped.startswith(f"'{target_id_str}':") or
+                stripped.startswith(f'"{ target_id_str}":')):
+                logger.log(f"[LuaTools] Removing token from config for AppID: {appid}")
+                token_removed = True
+                continue
+            new_lines.append(line)
+
+        if token_removed:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+
+    except Exception as e:
+        logger.warn(f"[LuaTools] Error cleaning token in UnFix: {e}")
 
 
 def GetPluginDir() -> str:  # Legacy API used by the frontend
@@ -215,6 +446,9 @@ def CancelApplyFix(appid: int, contentScriptQuery: str = "") -> str:
 
 
 def UnFixGame(appid: int, installPath: str = "", fixDate: str = "", contentScriptQuery: str = "") -> str:
+    # Chain: remove token & fake appid before file cleanup
+    RemoveGameToken(appid)
+    RemoveFakeAppId(appid)
     return unfix_game(appid, installPath, fixDate)
 
 
@@ -246,6 +480,10 @@ def LaunchAccelaForApp(appid: int, contentScriptQuery: str = "") -> str:
 
     ok = _launch_accela_download(appid, zip_path)
     return json.dumps({"success": ok, "error": None if ok else "ACCELA not installed"})
+
+
+def ApplyLinuxNativeFix(appid: int, installPath: str, contentScriptQuery: str = "") -> str:
+    return apply_linux_native_fix(installPath)
 
 
 def GetGameInstallPath(appid: int, contentScriptQuery: str = "") -> str:
@@ -405,6 +643,330 @@ def GetTranslations(contentScriptQuery: str = "", language: str = "", **kwargs: 
         return json.dumps({"success": False, "error": str(exc)})
 
 
+# ==========================================
+#  API WRAPPERS (Friend's features)
+# ==========================================
+
+def SaveRyuuCookie(cookie: str, contentScriptQuery: str = "") -> str:
+    return save_ryu_cookie(cookie)
+
+
+def UpdateMorrenusKey(key: str, contentScriptQuery: str = "") -> str:
+    return update_morrenus_key(key)
+
+
+def GetLauncherPath(contentScriptQuery: str = "") -> str:
+    path = load_launcher_path()
+    return json.dumps({"success": True, "path": path})
+
+
+def SaveLauncherPath(path: str, contentScriptQuery: str = "") -> str:
+    return save_launcher_path_config(path)
+
+
+def GetWorkshopToolPath(contentScriptQuery: str = "") -> str:
+    path = load_workshop_tool_path()
+    return json.dumps({"success": True, "path": path})
+
+
+def SaveWorkshopToolPath(path: str, contentScriptQuery: str = "") -> str:
+    result = save_workshop_tool_path(path)
+    return json.dumps(result)
+
+
+def BrowseForLauncher(contentScriptQuery: str = "") -> str:
+    return browse_for_launcher()
+
+
+def InstallDependencies(contentScriptQuery: str = "") -> str:
+    """Install Python dependencies from requirements.txt."""
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        plugin_root = current_dir
+
+        for _ in range(2):
+            if os.path.exists(os.path.join(plugin_root, "plugin.json")):
+                break
+            parent = os.path.dirname(plugin_root)
+            if parent == plugin_root: break
+            plugin_root = parent
+
+        venv_dir = os.path.join(plugin_root, ".venv")
+        requirements_file = os.path.join(plugin_root, "requirements.txt")
+
+        if not os.path.exists(requirements_file):
+            requirements_file = os.path.join(current_dir, "requirements.txt")
+
+        if sys.platform == "win32":
+            venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
+        else:
+            venv_python = os.path.join(venv_dir, "bin", "python")
+
+        if not os.path.exists(requirements_file):
+            return json.dumps({"success": False, "error": "requirements.txt not found!"})
+
+        if not os.path.exists(venv_dir) or not os.path.exists(venv_python):
+            logger.log(f"[LuaTools] Creating venv at: {venv_dir}")
+            subprocess.check_call([sys.executable, "-m", "venv", venv_dir])
+
+        logger.log("[LuaTools] Installing dependencies...")
+        subprocess.check_call([venv_python, "-m", "pip", "install", "-r", requirements_file])
+
+        return json.dumps({"success": True, "message": "Dependencies installed successfully!"})
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"[LuaTools] pip failed: {e}")
+        return json.dumps({"success": False, "error": "Failed to install dependencies (check internet/proxy)"})
+    except Exception as e:
+        logger.error(f"[LuaTools] General error: {str(e)}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# ==========================================
+#  WORKSHOP DOWNLOADER LOGIC
+# ==========================================
+
+workshop_state = {
+    "status": "idle",
+    "progress": 0.0,
+    "message": "",
+    "download_path": "",
+    "process": None
+}
+
+
+def _run_depot_downloader_workshop(appid: str, pubfile_id: str, download_dir: str):
+    global workshop_state
+
+    exe_path = None
+    used_source = "Local"
+    custom_path = load_workshop_tool_path()
+
+    # 1. Try to find the executable (custom or default)
+    if custom_path and os.path.exists(custom_path):
+        if os.path.isdir(custom_path):
+            if sys.platform == "win32":
+                potential_exe = os.path.join(custom_path, "DepotDownloaderMod.exe")
+            else:
+                potential_exe = os.path.join(custom_path, "DepotDownloaderMod")
+
+            if os.path.exists(potential_exe):
+                exe_path = potential_exe
+                used_source = "Custom (Config)"
+        elif os.path.isfile(custom_path):
+            exe_path = custom_path
+            used_source = "Custom (Config)"
+
+    if not exe_path:
+        try:
+            base_path = os.path.join(get_plugin_dir(), "backend")
+        except Exception:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+
+        if sys.platform == "win32":
+            exe_path = os.path.join(base_path, "DepotDownloaderMod.exe")
+        else:
+            exe_path = os.path.join(base_path, "DepotDownloaderMod")
+
+    # Ensure execution permission on Linux
+    if sys.platform != "win32" and os.path.exists(exe_path):
+        try:
+            st = os.stat(exe_path)
+            os.chmod(exe_path, st.st_mode | stat.S_IEXEC)
+        except Exception as e:
+            logger.warn(f"Failed to chmod DepotDownloader: {e}")
+
+    if not os.path.exists(exe_path):
+        workshop_state["status"] = "failed"
+        workshop_state["message"] = f"Executable not found: {exe_path}"
+        logger.error("DepotDownloader not found")
+        return
+
+    cmd = [
+        exe_path,
+        "-app", str(appid),
+        "-pubfile", str(pubfile_id),
+        "-dir", download_dir,
+        "-max-downloads", "8"
+    ]
+
+    try:
+        workshop_state["status"] = "downloading"
+        workshop_state["message"] = f"Starting download ({used_source})..."
+        workshop_state["progress"] = 0.0
+
+        if sys.platform == "win32":
+            creation_flags = subprocess.CREATE_NO_WINDOW
+        else:
+            creation_flags = 0
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            creationflags=creation_flags
+        )
+        workshop_state["process"] = process
+
+        percent_regex = re.compile(r"(\d{1,3}\.\d{2})%")
+        last_output_line = "Unknown Error"
+        output_log = []
+
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+
+            if line:
+                clean_line = line.strip()
+                if clean_line:
+                    output_log.append(clean_line.lower())
+
+                if "%" not in clean_line:
+                    workshop_state["message"] = clean_line
+                    if clean_line:
+                        last_output_line = clean_line
+
+                match = percent_regex.search(clean_line)
+                if match:
+                    try:
+                        p = float(match.group(1))
+                        workshop_state["progress"] = p
+                        workshop_state["message"] = f"Downloading: {p}%"
+                    except Exception:
+                        pass
+
+        rc = process.poll()
+        workshop_state["process"] = None
+
+        # --- Rigorous success verification ---
+        has_valid_files = False
+
+        if os.path.exists(download_dir):
+            ignored_names = {".depotdownloader", "depotdownloader.config", ".ds_store", "thumbs.db"}
+            total_size = 0
+            file_count = 0
+
+            for root, dirs, files in os.walk(download_dir):
+                dirs[:] = [d for d in dirs if d.lower() not in ignored_names]
+                for f in files:
+                    if f.lower() not in ignored_names:
+                        fp = os.path.join(root, f)
+                        try:
+                            size = os.path.getsize(fp)
+                            total_size += size
+                            file_count += 1
+                        except Exception:
+                            pass
+
+            if file_count > 0 and total_size > 0:
+                has_valid_files = True
+
+        full_log_str = "\n".join(output_log)
+        auth_error = "access denied" in full_log_str or "manifest not available" in full_log_str or "no subscription" in full_log_str or "purchase" in full_log_str
+
+        if rc == 0 and has_valid_files and not auth_error:
+            workshop_state["status"] = "done"
+            workshop_state["message"] = "Download Complete!"
+            workshop_state["progress"] = 100.0
+            OpenGameFolder(download_dir)
+        else:
+            workshop_state["status"] = "failed"
+
+            if auth_error or (rc == 0 and not has_valid_files):
+                workshop_state["message"] = "LOGIN_REQUIRED"
+                workshop_state["error"] = "Download resulted in empty folder (Anonymous restriction)"
+            else:
+                workshop_state["message"] = f"Error: {last_output_line}"
+
+    except Exception as e:
+        workshop_state["status"] = "failed"
+        workshop_state["message"] = f"Internal Error: {str(e)}"
+        logger.error(f"Workshop download error: {e}")
+
+
+def StartWorkshopDownloadParams(appid: int, pubfile_id: int, contentScriptQuery: str = "") -> str:
+    global workshop_state
+
+    if workshop_state["status"] == "downloading":
+        return json.dumps({"success": False, "error": "Download already in progress."})
+
+    try:
+        steam_root = Millennium.steam_path()
+        download_dir = os.path.join(steam_root, "steamapps", "workshop", "content", str(appid), str(pubfile_id))
+    except Exception as e:
+        logger.error(f"Error resolving paths: {e}")
+        return json.dumps({"success": False, "error": "Path resolution error"})
+
+    try:
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir, exist_ok=True)
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Failed to create dir: {e}"})
+
+    workshop_state = {
+        "status": "downloading",
+        "progress": 0,
+        "message": "Initializing...",
+        "download_path": download_dir,
+        "process": None
+    }
+
+    t = threading.Thread(target=_run_depot_downloader_workshop, args=(appid, pubfile_id, download_dir))
+    t.daemon = True
+    t.start()
+
+    return json.dumps({"success": True, "message": "Download started"})
+
+
+def GetWorkshopDownloadStatus(contentScriptQuery: str = "") -> str:
+    safe_state = workshop_state.copy()
+    if "process" in safe_state:
+        del safe_state["process"]
+    return json.dumps(safe_state)
+
+
+def CancelWorkshopDownload(contentScriptQuery: str = "") -> str:
+    global workshop_state
+    if workshop_state["process"]:
+        try:
+            workshop_state["process"].kill()
+            workshop_state["status"] = "cancelled"
+            workshop_state["message"] = "Cancelled by user."
+        except Exception:
+            pass
+    return json.dumps({"success": True})
+
+
+def GetThemes(contentScriptQuery: str = "") -> str:
+    try:
+        themes_path = os.path.join(get_plugin_dir(), 'public', 'themes', 'themes.json')
+        if os.path.exists(themes_path):
+            try:
+                with open(themes_path, 'r', encoding='utf-8') as fh:
+                    data = json.load(fh)
+                    return json.dumps({"success": True, "themes": data})
+            except Exception as exc:
+                logger.warn(f"LuaTools: Failed to read themes.json: {exc}")
+                return json.dumps({"success": False, "error": "Failed to read themes.json"})
+        else:
+            return json.dumps({"success": True, "themes": []})
+    except Exception as exc:
+        logger.warn(f"LuaTools: GetThemes failed: {exc}")
+        return json.dumps({"success": False, "error": str(exc)})
+
+
+# ==========================================
+#  API EXPOSED FOR FRONTEND (PILL)
+# ==========================================
+
+def GetGamesDatabase(contentScriptQuery: str = "") -> str:
+    return get_games_database()
+
+
 class Plugin:
     def _front_end_loaded(self):
         _copy_webkit_files()
@@ -442,14 +1004,18 @@ class Plugin:
         except Exception as exc:
             logger.warn(f"AutoUpdate: apply pending failed: {exc}")
 
-        def _init_applist_bg():
+        def _init_background():
             try:
                 init_applist()
             except Exception as exc:
                 logger.warn(f"LuaTools: Applist initialization failed: {exc}")
+            try:
+                init_games_db()
+            except Exception as exc:
+                logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
 
-        # Start applist init in background thread to avoid blocking main thread
-        threading.Thread(target=_init_applist_bg, daemon=True).start()
+        # Start applist + games db init in background thread to avoid blocking main thread
+        threading.Thread(target=_init_background, daemon=True).start()
 
         _copy_webkit_files()
         _inject_webkit_files()
