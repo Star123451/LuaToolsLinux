@@ -35,7 +35,7 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 
 **One-liner:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash
 ```
 
 <details>
@@ -104,7 +104,7 @@ LuaTools discovers Steam and related tools at these locations:
 
 ## Credits
 
-- **LuaTools (Linux)** — by [StarWarsK](https://github.com/StarWarsK) & geovanygrdt
+- **LuaTools (Linux)** — by [StarWarsK](https://github.com/Star123451) & geovanygrdt
 - **LuaTools** — original plugin by [madoiscool](https://github.com/madoiscool)
 - **SLSsteam** — by [AceSLS](https://github.com/AceSLS/SLSsteam)
 - **ACCELA / Enter The Wired** — by [ciscosweater](https://github.com/ciscosweater/enter-the-wired)

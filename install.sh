@@ -6,7 +6,7 @@ set -euo pipefail
 #  By StarWarsK & geovanygrdt
 # ============================================
 
-REPO_URL="https://github.com/Star123451/LuaToolsLinux/main/install.sh"  # TODO: update with actual repo URL
+REPO_URL="https://github.com/Star123451/LuaToolsLinux"
 BRANCH="main"
 PLUGIN_NAME="luatools"
 

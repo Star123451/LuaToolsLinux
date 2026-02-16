@@ -510,6 +510,25 @@ def OpenExternalUrl(url: str, contentScriptQuery: str = "") -> str:
         return json.dumps({"success": False, "error": str(exc)})
 
 
+def GetProtonDBRating(appid: int, contentScriptQuery: str = "") -> str:
+    """Fetch ProtonDB rating for a game, bypassing CORS."""
+    try:
+        import requests
+        url = f"https://www.protondb.com/api/v1/reports/summaries/{appid}.json"
+        resp = requests.get(url, timeout=10, headers={
+            "User-Agent": "LuaTools/1.0"
+        })
+        if resp.status_code == 404:
+            return json.dumps({"success": True, "tier": "pending"})
+        resp.raise_for_status()
+        data = resp.json()
+        tier = (data.get("tier") or data.get("confidence") or "pending").lower()
+        return json.dumps({"success": True, "tier": tier})
+    except Exception as exc:
+        logger.warn(f"LuaTools: GetProtonDBRating failed for {appid}: {exc}")
+        return json.dumps({"success": False, "error": str(exc)})
+
+
 def GetSettingsConfig(contentScriptQuery: str = "") -> str:
     try:
         payload = get_settings_payload()
