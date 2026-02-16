@@ -97,6 +97,8 @@
     "menu.advancedLabel": "Advanced",
     "menu.checkForUpdates": "Check For Updates",
     "menu.discord": "Discord",
+    "menu.debugBadgeOff": "Debug Badge: OFF",
+    "menu.debugBadgeOn": "Debug Badge: ON",
     "menu.error.getPath": "Error getting game path",
     "menu.error.noAppId": "Could not determine game AppID",
     "menu.error.noInstall": "Could not find game installation",

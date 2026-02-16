@@ -16,10 +16,72 @@
     }
 
     backendLog('LuaTools script loaded');
+    window.__LuaToolsSetDebugBadge = setDebugBadgeEnabled;
+    if (isDebugBadgeEnabled()) {
+        updateDebugBadge('loaded');
+    }
     // anti-spam state
     const logState = { missingOnce: false, existsOnce: false };
     // click/run debounce state
     const runState = { inProgress: false, appid: null };
+
+    const PRESENCE_TIMEOUT_MS = 2500;
+    const DEBUG_BADGE_KEY = 'LuaToolsDebugBadge';
+
+    function isDebugBadgeEnabled() {
+        try { return localStorage.getItem(DEBUG_BADGE_KEY) === '1'; } catch (_) { return false; }
+    }
+
+    function setDebugBadgeEnabled(enabled) {
+        try { localStorage.setItem(DEBUG_BADGE_KEY, enabled ? '1' : '0'); } catch (_) { }
+        if (enabled) {
+            ensureDebugBadgeElement();
+            updateDebugBadge('debug on');
+        } else {
+            const badge = document.getElementById('luatools-debug-badge');
+            if (badge && badge.parentElement) badge.parentElement.removeChild(badge);
+        }
+    }
+
+    function ensureDebugBadgeElement() {
+        if (!isDebugBadgeEnabled()) return null;
+        let badge = document.getElementById('luatools-debug-badge');
+        if (badge) return badge;
+        try {
+            badge = document.createElement('div');
+            badge.id = 'luatools-debug-badge';
+            badge.style.cssText = 'position:fixed;top:8px;right:8px;z-index:99999;background:rgba(20,20,20,0.85);color:#66c0f4;font-size:11px;font-family:monospace;padding:6px 8px;border:1px solid rgba(102,192,244,0.5);border-radius:6px;pointer-events:none;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            badge.textContent = 'LuaTools debug';
+            document.body.appendChild(badge);
+            return badge;
+        } catch (_) { return null; }
+    }
+
+    function updateDebugBadge(message) {
+        if (!isDebugBadgeEnabled()) return;
+        const badge = ensureDebugBadgeElement();
+        if (!badge) return;
+        const text = String(message || '');
+        const stamp = new Date().toLocaleTimeString();
+        badge.textContent = 'LuaTools: ' + text + ' @ ' + stamp;
+    }
+
+    function shouldSkipPresenceCheck(appid) {
+        if (window.__LuaToolsPresenceCheckInFlight && window.__LuaToolsPresenceCheckAppId === appid) {
+            const startedAt = window.__LuaToolsPresenceCheckStartedAt || 0;
+            if (startedAt && (Date.now() - startedAt) > PRESENCE_TIMEOUT_MS) {
+                window.__LuaToolsPresenceCheckInFlight = false;
+                window.__LuaToolsPresenceCheckAppId = undefined;
+                window.__LuaToolsPresenceCheckStartedAt = 0;
+                backendLog('LuaTools presence check timed out; retrying');
+                updateDebugBadge('presence timeout for ' + appid);
+                return false;
+            }
+            updateDebugBadge('presence in-flight for ' + appid);
+            return true;
+        }
+        return false;
+    }
 
     const TRANSLATION_PLACEHOLDER = 'translation missing';
 
@@ -226,6 +288,17 @@
             const fetchApisBtn = createMenuButton('lt-settings-fetch-apis', 'menu.fetchFreeApis', 'Fetch Free APIs', 'fa-server');
             // --- DEPENDENCY INSTALL BUTTON ---
             const installBtn = createMenuButton('lt-install-deps', 'menu.install', 'Install Dependencies', 'fa-download');
+            const debugBadgeBtn = createMenuButton('lt-settings-debug-badge', 'menu.debugBadge', 'Debug Badge', 'fa-bug');
+
+            function updateDebugBadgeButtonLabel(btn) {
+                if (!btn) return;
+                const enabled = isDebugBadgeEnabled();
+                const label = enabled
+                    ? t('menu.debugBadgeOn', 'Debug Badge: ON')
+                    : t('menu.debugBadgeOff', 'Debug Badge: OFF');
+                const icon = '<i class="fa-solid fa-bug" style="font-size:16px;"></i>';
+                btn.innerHTML = icon + '<span style="text-align:center;">' + label + '</span>';
+            }
 
             if (installBtn) {
                 installBtn.addEventListener('click', function (e) {
@@ -260,6 +333,15 @@
                 });
             }
             // ----------------------------------
+
+            if (debugBadgeBtn) {
+                updateDebugBadgeButtonLabel(debugBadgeBtn);
+                debugBadgeBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setDebugBadgeEnabled(!isDebugBadgeEnabled());
+                    updateDebugBadgeButtonLabel(debugBadgeBtn);
+                });
+            }
 
             body.appendChild(container);
 
@@ -3158,6 +3240,8 @@
             window.__LuaToolsIconInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
+            window.__LuaToolsPresenceCheckStartedAt = 0;
+            updateDebugBadge('nav reset');
 
             ensureTranslationsLoaded(false).then(function () {
                 updateButtonTranslations();
@@ -3344,10 +3428,12 @@
                 const appid = match ? parseInt(match[1], 10) : NaN;
 
                 if (!isNaN(appid) && typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                    if (window.__LuaToolsPresenceCheckInFlight && window.__LuaToolsPresenceCheckAppId === appid) return;
+                    if (shouldSkipPresenceCheck(appid)) return;
 
                     window.__LuaToolsPresenceCheckInFlight = true;
                     window.__LuaToolsPresenceCheckAppId = appid;
+                    window.__LuaToolsPresenceCheckStartedAt = Date.now();
+                    updateDebugBadge('presence start ' + appid);
                     window.__LuaToolsCurrentAppId = appid;
 
                     Millennium.callServerMethod('luatools', 'HasLuaToolsForApp', { appid, contentScriptQuery: '' }).then(function (res) {
@@ -3356,6 +3442,8 @@
                             if (payload && payload.success && payload.exists === true) {
                                 backendLog('LuaTools already present for this app; not inserting button');
                                 window.__LuaToolsPresenceCheckInFlight = false;
+                                window.__LuaToolsPresenceCheckStartedAt = 0;
+                                updateDebugBadge('presence exists ' + appid);
                                 return;
                             }
 
@@ -3378,6 +3466,8 @@
                                 backendLog('LuaTools button wrapper inserted');
                             }
                             window.__LuaToolsPresenceCheckInFlight = false;
+                            window.__LuaToolsPresenceCheckStartedAt = 0;
+                            updateDebugBadge('presence done ' + appid);
                         } catch (_) {
                             // Fallback em caso de erro no parse
                             if (!document.querySelector('.luatools-button')) {
@@ -3386,6 +3476,8 @@
                                 window.__LuaToolsButtonInserted = true;
                             }
                             window.__LuaToolsPresenceCheckInFlight = false;
+                            window.__LuaToolsPresenceCheckStartedAt = 0;
+                            updateDebugBadge('presence parse fallback ' + appid);
                         }
                     });
                 } else {
@@ -3587,6 +3679,8 @@
             window.__LuaToolsIconInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
+            window.__LuaToolsPresenceCheckStartedAt = 0;
+            updateDebugBadge('nav reset');
             try {
                 var old = document.querySelectorAll('.luatools-button, .luatools-restart-button, .luatools-icon-button, .luatools-proton-btn, #luatools-main-wrapper, #luatools-workshop-btn');
                 for (var i = 0; i < old.length; i++) { try { old[i].remove(); } catch (_) { } }
@@ -3948,14 +4042,21 @@
                 const match = window.location.href.match(/https:\/\/store\.steampowered\.com\/app\/(\d+)/) || window.location.href.match(/https:\/\/steamcommunity\.com\/app\/(\d+)/);
                 const appid = match ? parseInt(match[1], 10) : NaN;
                 if (!isNaN(appid) && typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                    if (window.__LuaToolsPresenceCheckInFlight && window.__LuaToolsPresenceCheckAppId === appid) return;
-                    window.__LuaToolsPresenceCheckInFlight = true; window.__LuaToolsPresenceCheckAppId = appid; window.__LuaToolsCurrentAppId = appid;
+                    if (shouldSkipPresenceCheck(appid)) return;
+                    window.__LuaToolsPresenceCheckInFlight = true;
+                    window.__LuaToolsPresenceCheckAppId = appid;
+                    window.__LuaToolsPresenceCheckStartedAt = Date.now();
+                    updateDebugBadge('presence start ' + appid);
+                    window.__LuaToolsCurrentAppId = appid;
 
                     Millennium.callServerMethod('luatools', 'HasLuaToolsForApp', { appid, contentScriptQuery: '' }).then(function (res) {
                         try {
                             const payload = typeof res === 'string' ? JSON.parse(res) : res;
                             if (payload && payload.success && payload.exists === true) {
-                                window.__LuaToolsPresenceCheckInFlight = false; return;
+                                window.__LuaToolsPresenceCheckInFlight = false;
+                                window.__LuaToolsPresenceCheckStartedAt = 0;
+                                updateDebugBadge('presence exists ' + appid);
+                                return;
                             }
                             if (!document.querySelector('.luatools-button') && !window.__LuaToolsButtonInserted) {
                                 const restartExisting = steamdbContainer.querySelector('.luatools-restart-button');
@@ -3967,6 +4068,8 @@
                                 window.__LuaToolsButtonInserted = true;
                             }
                             window.__LuaToolsPresenceCheckInFlight = false;
+                            window.__LuaToolsPresenceCheckStartedAt = 0;
+                            updateDebugBadge('presence done ' + appid);
                         } catch (_) {
                             if (!document.querySelector('.luatools-button')) {
                                 steamdbContainer.appendChild(mainWrapper);
@@ -3974,6 +4077,8 @@
                                 window.__LuaToolsButtonInserted = true;
                             }
                             window.__LuaToolsPresenceCheckInFlight = false;
+                            window.__LuaToolsPresenceCheckStartedAt = 0;
+                            updateDebugBadge('presence parse fallback ' + appid);
                         }
                     });
                 } else {
