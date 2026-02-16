@@ -33,10 +33,19 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 
 ## Installation
 
-**One-liner:**
+**One-liner (Auto-installs everything):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash
 ```
+
+The installer will automatically:
+- ✅ Install Millennium if not found
+- ✅ Install SLSsteam if not found (requires build-essential)
+- ✅ Install ACCELA if not found
+- ✅ Clone/update LuaTools plugin
+- ✅ No pip or external Python packages needed
+
+Each component installation is optional - you can skip any you want to install manually.
 
 <details>
 <summary>Manual installation</summary>
