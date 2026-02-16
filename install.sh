@@ -56,18 +56,36 @@ if ! command -v make &>/dev/null || ! command -v gcc &>/dev/null; then
     fi
 fi
 
+# --- Check and install pkg-config (required for SLSsteam) ---
+if ! command -v pkg-config &>/dev/null; then
+    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
+        info "Installing pkg-config..."
+        sudo apt install -y pkg-config
+        ok "pkg-config installed"
+    else
+        warn "pkg-config not found - needed for SLSsteam"
+        echo -e "  Install with: ${CYAN}sudo apt install pkg-config${NC}"
+    fi
+fi
+
 # --- Check and install 32-bit libraries (required for SLSsteam) ---
 if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
     if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
         info "Installing 32-bit development libraries (required for SLSsteam)..."
-        if sudo apt install -y gcc-multilib g++-multilib 2>&1 | grep -q "conflicting"; then
-            warn "gcc-multilib conflicts detected - continuing anyway (may affect SLSsteam build)"
-        else
-            ok "32-bit libraries installed"
+        # Install all required 32-bit dependencies in one command
+        sudo apt install -y gcc-multilib g++-multilib libc6-dev-i386 2>&1 | tee /tmp/multilib_install.log
+        
+        if grep -q "conflicting" /tmp/multilib_install.log; then
+            warn "Multilib conflicts detected - trying alternative approach..."
+            # If conflicts occur, try installing just the essentials
+            sudo apt install -y libc6-dev-i386 pkg-config
         fi
+        
+        ok "32-bit libraries installed"
+        rm -f /tmp/multilib_install.log
     else
         info "32-bit development libraries not detected (required for SLSsteam)"
-        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib${NC}"
+        echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386${NC}"
     fi
 fi
 
