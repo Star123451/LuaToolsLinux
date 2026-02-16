@@ -71,32 +71,47 @@ fi
 # --- Check and install 32-bit libraries and dependencies (required for SLSsteam) ---
 if ! dpkg -l 2>/dev/null | grep -q "gcc-multilib"; then
     if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-        info "Installing 32-bit development libraries and dependencies (required for SLSsteam)..."
+        info "Installing 32-bit development libraries and dependencies for SLSsteam..."
         
-        # Enable i386 architecture for 32-bit libraries
+        # Step 1: Enable i386 architecture
+        info "Step 1/3: Enabling 32-bit architecture..."
         sudo dpkg --add-architecture i386 2>/dev/null || true
-        sudo apt update -qq
         
-        # Install all required dependencies
-        info "Installing build dependencies (this may take a moment)..."
-        sudo apt install -y \
-            gcc-multilib \
-            g++-multilib \
-            libc6-dev-i386 \
-            libssl-dev \
-            libssl-dev:i386 \
-            libcurl4-openssl-dev \
-            libcurl4-openssl-dev:i386 \
-            2>&1 | tee /tmp/deps_install.log
-        
-        if grep -q "Unable to locate\|conflicting\|not found" /tmp/deps_install.log; then
-            warn "Some packages may have failed - trying minimal set..."
-            # Fallback to essentials only
-            sudo apt install -y libc6-dev-i386 libssl-dev pkg-config
+        # Step 2: Update package lists
+        info "Step 2/3: Updating package lists..."
+        if ! sudo apt update -qq 2>/tmp/apt_update.log; then
+            warn "apt update had issues, but continuing..."
+            cat /tmp/apt_update.log | grep -i "error\|failed" | head -5 || true
         fi
         
-        ok "Build dependencies installed"
-        rm -f /tmp/deps_install.log
+        # Step 3: Install dependencies (split into groups for better error handling)
+        info "Step 3/3: Installing build dependencies..."
+        
+        # Install 64-bit essentials first
+        info "  Installing 64-bit compiler tools..."
+        sudo apt install -y gcc-multilib g++-multilib
+        
+        # Install 32-bit C library
+        info "  Installing 32-bit C library..."
+        sudo apt install -y libc6-dev-i386
+        
+        # Install OpenSSL (most important)
+        info "  Installing OpenSSL development files..."
+        sudo apt install -y libssl-dev || {
+            warn "libssl-dev installation failed (64-bit), trying with -dev-i386..."
+            sudo apt install -y libssl-dev-i386 || warn "OpenSSL install failed"
+        }
+        
+        # Try to install 32-bit OpenSSL
+        info "  Installing 32-bit OpenSSL..."
+        sudo apt install -y libssl-dev:i386 2>/dev/null || warn "32-bit OpenSSL optional, continuing..."
+        
+        # Install cURL (optional but useful)
+        info "  Installing cURL development files..."
+        sudo apt install -y libcurl4-openssl-dev 2>/dev/null || warn "libcurl install optional, continuing..."
+        
+        ok "Build dependencies installation complete"
+        rm -f /tmp/apt_update.log
     else
         info "32-bit development libraries not detected (required for SLSsteam)"
         echo -e "  Install with: ${CYAN}sudo apt install gcc-multilib g++-multilib libc6-dev-i386 libssl-dev${NC}"
@@ -128,29 +143,44 @@ install_slssteam() {
     
     # Clone and build
     local temp_dir=$(mktemp -d)
+    info "  Working in: $temp_dir"
     cd "$temp_dir"
     
-    if git clone https://github.com/AceSLS/SLSsteam.git; then
-        cd SLSsteam
+    info "  Cloning repository..."
+    if ! git clone https://github.com/AceSLS/SLSsteam.git 2>&1 | tail -3; then
+        warn "Failed to clone SLSsteam repository"
+        cd /
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    cd SLSsteam
+    
+    # Build SLSsteam
+    info "  Compiling SLSsteam (this may take a few minutes)..."
+    if make 2>&1 | tee /tmp/slssteam_build.log; then
+        info "  Build successful, installing..."
+        mkdir -p "$slssteam_dir"
         
-        # Build SLSsteam
-        if make; then
-            mkdir -p "$slssteam_dir"
+        if [ -f "SLSsteam.so" ]; then
             cp SLSsteam.so "$slssteam_dir/"
             chmod +x "$slssteam_dir/SLSsteam.so"
-            cd
+            cd /
             rm -rf "$temp_dir"
             ok "SLSsteam installed to $slssteam_dir"
             return 0
         else
-            warn "SLSsteam build failed - check that all dependencies are installed"
-            cd
+            warn "SLSsteam.so not found after build"
+            cd /
             rm -rf "$temp_dir"
             return 1
         fi
     else
-        warn "Failed to clone SLSsteam repository"
-        cd
+        warn "SLSsteam build failed"
+        echo ""
+        echo -e "${YELLOW}Build errors:${NC}"
+        tail -20 /tmp/slssteam_build.log | grep -i "error\|undefined" | head -10 || echo "See /tmp/slssteam_build.log for details"
+        cd /
         rm -rf "$temp_dir"
         return 1
     fi
