@@ -51,12 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/insta
    git clone <repo-url> ~/.local/share/millennium/plugins/luatools
    ```
 
-3. Install Python dependencies:
-   ```bash
-   pip install -r ~/.local/share/millennium/plugins/luatools/requirements.txt
-   ```
-
-4. Restart Steam — LuaTools will load automatically via Millennium.
+3. Restart Steam — LuaTools will load automatically via Millennium.
 
 </details>
 
@@ -65,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/insta
 ```
 luatools/
 ├── plugin.json              # Millennium plugin manifest
-├── requirements.txt         # Python dependencies (httpx)
+├── requirements.txt         # Python dependencies (none - uses stdlib only!)
 ├── backend/
 │   ├── main.py              # Plugin entry point + API wrappers
 │   ├── linux_platform.py    # Linux path detection & platform helpers
@@ -96,6 +91,7 @@ LuaTools discovers Steam and related tools at these locations:
 | Component | Path |
 |-----------|------|
 | Steam root | `~/.steam/steam` or `~/.local/share/Steam` |
+| Lua scripts | `{steam_root}/config/stplug-in/*.lua` |
 | Depot manifests | `{steam_root}/depotcache/*.manifest` |
 | SLSsteam binary | `~/.local/share/SLSsteam/SLSsteam.so` |
 | SLSsteam config | `~/.config/SLSsteam/config.yaml` |
