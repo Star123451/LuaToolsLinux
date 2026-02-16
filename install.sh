@@ -44,6 +44,12 @@ if ! command -v curl &>/dev/null; then
     echo -e "  Install with: ${CYAN}sudo apt install curl${NC}"
 fi
 
+# --- Check for 7zip (needed for SLSsteam extraction) ---
+if ! command -v 7z &>/dev/null; then
+    warn "7zip not found, will install when needed for SLSsteam"
+    echo -e "  You can pre-install with: ${CYAN}sudo apt install 7zip${NC}"
+fi
+
 # --- Check and install build tools (needed for SLSsteam) ---
 if ! command -v make &>/dev/null || ! command -v gcc &>/dev/null; then
     if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
@@ -63,8 +69,6 @@ if ! dpkg --print-foreign-architectures 2>/dev/null | grep -q "i386"; then
         sudo dpkg --add-architecture i386 && sudo apt update -qq
     fi
 fi
-
-info "Note: SLSsteam build script will install any additional dependencies as needed"
 
 # --- Install Millennium if not found ---
 install_millennium() {
@@ -87,63 +91,66 @@ install_millennium() {
 # --- Install SLSsteam if not found ---
 install_slssteam() {
     info "Installing SLSsteam..."
-    local slssteam_dir="$HOME/.local/share/SLSsteam"
     
-    # Clone the repository
-    local temp_dir=$(mktemp -d)
-    info "  Working in: $temp_dir"
-    cd "$temp_dir"
-    
-    info "  Cloning repository..."
-    if ! git clone https://github.com/AceSLS/SLSsteam.git 2>&1 | tail -3; then
-        warn "Failed to clone SLSsteam repository"
-        cd /
-        rm -rf "$temp_dir"
-        return 1
+    # Check if 7z is available
+    if ! command -v 7z &>/dev/null; then
+        warn "7z is required to extract SLSsteam"
+        if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
+            info "Installing 7zip..."
+            sudo apt update -qq && sudo apt install -y 7zip
+        else
+            fail "Please install 7zip: sudo apt install 7zip"
+        fi
     fi
     
-    cd SLSsteam
+    # Create temp directory for download
+    local temp_dir=$(mktemp -d)
+    info "  Downloading SLSsteam..."
     
-    # Check if there's an install.sh script in the repo
-    if [ -f "install.sh" ]; then
-        info "Running SLSsteam's install script..."
-        if bash install.sh; then
-            ok "SLSsteam installed successfully"
-            cd /
-            rm -rf "$temp_dir"
-            return 0
-        else
-            warn "SLSsteam's install script failed"
-            cd /
-            rm -rf "$temp_dir"
-            return 1
-        fi
-    else
-        # Fallback to manual build
-        info "No install.sh found, attempting manual build..."
-        if make; then
-            info "Build successful, installing..."
-            mkdir -p "$slssteam_dir"
+    # Download latest SLSsteam release
+    cd "$temp_dir"
+    if curl -fsSL -o SLSsteam-Any.7z "https://github.com/AceSLS/SLSsteam/releases/download/latest/SLSsteam-Any.7z" 2>&1; then
+        ok "Downloaded SLSsteam"
+        
+        # Extract
+        info "  Extracting..."
+        if 7z x SLSsteam-Any.7z > /dev/null 2>&1; then
+            ok "Extracted SLSsteam"
             
-            if [ -f "SLSsteam.so" ]; then
-                cp SLSsteam.so "$slssteam_dir/"
-                chmod +x "$slssteam_dir/SLSsteam.so"
-                cd /
-                rm -rf "$temp_dir"
-                ok "SLSsteam installed to $slssteam_dir"
-                return 0
+            # Run setup.sh install
+            if [ -d "SLSsteam" ]; then
+                cd SLSsteam
+                info "  Running SLSsteam setup..."
+                
+                if bash setup.sh install; then
+                    ok "SLSsteam installed successfully"
+                    cd /
+                    rm -rf "$temp_dir"
+                    return 0
+                else
+                    warn "SLSsteam setup.sh install failed"
+                    cd /
+                    rm -rf "$temp_dir"
+                    return 1
+                fi
             else
-                warn "SLSsteam.so not found after build"
+                warn "SLSsteam directory not found after extraction"
                 cd /
                 rm -rf "$temp_dir"
                 return 1
             fi
         else
-            warn "SLSsteam build failed"
+            warn "Failed to extract SLSsteam"
             cd /
             rm -rf "$temp_dir"
             return 1
         fi
+    else
+        warn "Failed to download SLSsteam - check your internet connection"
+        echo -e "  Manual install: ${CYAN}https://github.com/AceSLS/SLSsteam/releases${NC}"
+        cd /
+        rm -rf "$temp_dir"
+        return 1
     fi
 }
 
