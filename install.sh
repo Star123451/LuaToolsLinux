@@ -31,12 +31,12 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 
 # --- Check for required tools ---
-for cmd in git python3 pip; do
+for cmd in git python3; do
     if ! command -v "$cmd" &>/dev/null; then
         fail "'$cmd' is not installed. Please install it first."
     fi
 done
-ok "Required tools found (git, python3, pip)"
+ok "Required tools found (git, python3)"
 
 # --- Detect Millennium plugins directory ---
 MILLENNIUM_DIR=""
@@ -104,15 +104,7 @@ else
     ok "Cloned successfully"
 fi
 
-# --- Install Python dependencies ---
-REQ_FILE="$INSTALL_DIR/requirements.txt"
-if [ -f "$REQ_FILE" ]; then
-    info "Installing Python dependencies..."
-    pip install --user -r "$REQ_FILE" 2>/dev/null || pip install -r "$REQ_FILE"
-    ok "Dependencies installed"
-else
-    warn "requirements.txt not found — skipping dependency install"
-fi
+ok "LuaTools installation complete"
 
 # --- Check for SLSsteam ---
 echo ""
