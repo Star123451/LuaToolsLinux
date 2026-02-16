@@ -50,17 +50,9 @@ Each component installation is optional - you can skip any you want to install m
 <details>
 <summary>Manual installation</summary>
 
-1. Install Millennium:
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/scripts/install.sh | bash
-   ```
+Please see this message in the LuaTools discord for manual installation steps:
 
-2. Clone this repo into the Millennium plugins directory:
-   ```bash
-   git clone <repo-url> ~/.local/share/millennium/plugins/luatools
-   ```
-
-3. Restart Steam — LuaTools will load automatically via Millennium.
+https://discord.com/channels/1408201417834893385/1473040386908885122/1473047251319394581
 
 </details>
 
