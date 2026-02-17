@@ -62,30 +62,16 @@ install_millennium() {
     fi
 }
 
-# --- Install Headcrab (replaces SLSsteam) ---
-install_headcrab() {
-    info "Installing Headcrab..."
+# --- Install both SLSsteam and ACCELA (enter-the-wired) ---
+install_enter_the_wired() {
+    info "Installing SLSsteam and ACCELA via enter-the-wired..."
     
-    if curl -fsSL "https://raw.githubusercontent.com/Deadboy666/h3adcr-b/refs/heads/main/headcrab.sh" | bash; then
-        ok "Headcrab installed successfully"
+    if curl -fsSL https://raw.githubusercontent.com/ciscosweater/enter-the-wired/main/enter-the-wired | bash; then
+        ok "SLSsteam and ACCELA installed successfully"
         return 0
     else
-        warn "Headcrab installation failed"
-        echo -e "  Manual install: ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
-        return 1
-    fi
-}
-
-# --- Install ACCELA if not found ---
-install_accela() {
-    info "Installing ACCELA..."
-    local accela_dir="$HOME/.local/share/ACCELA"
-    
-    if git clone https://github.com/ciscosweater/enter-the-wired.git "$accela_dir"; then
-        ok "ACCELA installed to $accela_dir"
-        return 0
-    else
-        warn "Failed to clone ACCELA repository"
+        warn "Installation failed"
+        echo -e "  Manual install: ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
         return 1
     fi
 }
@@ -175,34 +161,16 @@ fi
 
 ok "LuaTools installation complete"
 
-# --- Install Headcrab (only if not found, or ask to reinstall) ---
+# --- Install SLSsteam and ACCELA (only if not found, or ask to reinstall) ---
 echo ""
-HEADCRAB_FOUND=false
-HEADCRAB_PATH=""
-for p in "$HOME/.local/share/Headcrab" "$HOME/Headcrab" "/opt/Headcrab"; do
-    if [ -d "$p" ]; then
-        HEADCRAB_FOUND=true
-        HEADCRAB_PATH="$p"
-        break
-    fi
-done
-if [ "$HEADCRAB_FOUND" = true ]; then
-    ok "Headcrab is already installed at $HEADCRAB_PATH."
-    read -rp "  Do you want to redownload/reinstall Headcrab? [y/N] " REINSTALL_HEADCRAB
-    if [[ "${REINSTALL_HEADCRAB,,}" == "y" ]]; then
-        info "Reinstalling Headcrab..."
-        install_headcrab || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
-    else
-        info "Keeping existing Headcrab installation."
-    fi
-else
-    info "Headcrab not found - installing..."
-    install_headcrab || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
-fi
-
-# --- Install ACCELA (only if not found, or ask to reinstall) ---
+SLSSTEAM_FOUND=false
 ACCELA_FOUND=false
 ACCELA_PATH=""
+
+if [ -f "$HOME/.config/SLSsteam/config.yaml" ]; then
+    SLSSTEAM_FOUND=true
+fi
+
 for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
     if [ -d "$p" ]; then
         ACCELA_FOUND=true
@@ -210,19 +178,21 @@ for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
         break
     fi
 done
-if [ "$ACCELA_FOUND" = true ]; then
-    ok "ACCELA is already installed at $ACCELA_PATH."
-    read -rp "  Do you want to redownload/reinstall ACCELA? [y/N] " REINSTALL_ACCELA
-    if [[ "${REINSTALL_ACCELA,,}" == "y" ]]; then
-        info "Reinstalling ACCELA..."
-        rm -rf "$ACCELA_PATH"
-        install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
-    else
-        info "Keeping existing ACCELA installation."
-    fi
+
+if [ "$SLSSTEAM_FOUND" = true ] && [ "$ACCELA_FOUND" = true ]; then
+    ok "SLSsteam and ACCELA are already installed."
+elif [ "$SLSSTEAM_FOUND" = true ] || [ "$ACCELA_FOUND" = true ]; then
+    info "Some components are missing."
 else
-    info "ACCELA not found - installing..."
-    install_accela || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
+    info "SLSsteam and ACCELA not found."
+fi
+
+read -rp "  Install/reinstall SLSsteam and ACCELA? [y/N] " REINSTALL_BOTH
+if [[ "${REINSTALL_BOTH,,}" == "y" ]]; then
+    info "Installing SLSsteam and ACCELA..."
+    install_enter_the_wired || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/ciscosweater/enter-the-wired${NC}"
+else
+    info "Skipping SLSsteam and ACCELA installation."
 fi
 
 # --- Done ---
@@ -245,15 +215,12 @@ else
     echo -e "  ${RED}✗${NC} Millennium ${YELLOW}(required - please restart Steam after install)${NC}"
 fi
 
-HEADCRAB_STATUS=false
-for p in "$HOME/.local/share/Headcrab" "$HOME/Headcrab" "/opt/Headcrab"; do
-    if [ -d "$p" ]; then
-        echo -e "  ${GREEN}✓${NC} Headcrab (at $p)"
-        HEADCRAB_STATUS=true
-        break
-    fi
-done
-[ "$HEADCRAB_STATUS" = false ] && echo -e "  ${RED}✗${NC} Headcrab ${YELLOW}(required for SteamDB patching)${NC}"
+SLSSTEAM_STATUS=false
+if [ -f "$HOME/.config/SLSsteam/config.yaml" ]; then
+    echo -e "  ${GREEN}✓${NC} SLSsteam"
+    SLSSTEAM_STATUS=true
+fi
+[ "$SLSSTEAM_STATUS" = false ] && echo -e "  ${RED}✗${NC} SLSsteam ${YELLOW}(required for Steam configuration)${NC}"
 
 ACCELA_STATUS=false
 for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
@@ -264,5 +231,7 @@ for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
     fi
 done
 [ "$ACCELA_STATUS" = false ] && echo -e "  ${RED}✗${NC} ACCELA ${YELLOW}(required for downloads)${NC}"
+
+
 
 echo ""
