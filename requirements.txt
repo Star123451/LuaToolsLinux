@@ -1,3 +1,0 @@
-# No external dependencies required!
-# LuaTools now uses only Python standard library modules (urllib, json, etc.)
-# This means users don't need to install pip or any additional packages.
