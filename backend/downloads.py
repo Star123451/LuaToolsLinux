@@ -305,24 +305,56 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         return False
 
     try:
+        # Verify zip file is readable and has content
+        if os.path.getsize(zip_path) == 0:
+            logger.warn(f"LuaTools: Zip file is empty: {zip_path}")
+            return False
+
+        logger.log(f"LuaTools: Zip file ready for ACCELA: {zip_path} (size: {os.path.getsize(zip_path)} bytes)")
+
         # Make sure run.sh is executable
         os.chmod(run_script, 0o755)
+        logger.log(f"LuaTools: ACCELA run script permissions set: {run_script}")
 
         # Use the ACCELA directory as the working directory so ACCELA
         # can correctly detect its own path and resources.
         accela_dir = get_accela_dir() or os.path.dirname(run_script)
+        logger.log(f"LuaTools: ACCELA directory: {accela_dir}")
+
+        # Verify ACCELA directory exists
+        if not os.path.isdir(accela_dir):
+            logger.warn(f"LuaTools: ACCELA directory does not exist: {accela_dir}")
+            return False
+
+        # Verify run script exists and is executable
+        if not os.path.isfile(run_script):
+            logger.warn(f"LuaTools: ACCELA run script not found: {run_script}")
+            return False
 
         cmd = [run_script, zip_path]
         logger.log(f"LuaTools: Launching ACCELA for appid={appid}: {' '.join(cmd)} (cwd={accela_dir})")
 
-        subprocess.Popen(
+        # Use DEVNULL for cleaner detachment - don't use pipes with start_new_session
+        proc = subprocess.Popen(
             cmd,
             cwd=accela_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # detach from our process tree
         )
-        logger.log(f"LuaTools: ACCELA launched successfully for appid={appid}")
+        
+        # Give the process a moment to fail if it's going to fail immediately
+        time.sleep(1)
+        
+        # Check if process is still running or if it exited
+        poll_result = proc.poll()
+        if poll_result is not None:
+            # Process has already exited - this is a failure
+            logger.error(f"LuaTools: ACCELA process exited immediately with code {poll_result} - launch failed")
+            return False
+        
+        # Process is still running - this is success
+        logger.log(f"LuaTools: ACCELA launched successfully for appid={appid} - process running in background")
         
         # Start background task to fix file permissions after ACCELA finishes extraction
         perm_fix_thread = threading.Thread(
@@ -334,7 +366,9 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         
         return True
     except Exception as exc:
-        logger.warn(f"LuaTools: Failed to launch ACCELA: {exc}")
+        logger.error(f"LuaTools: Failed to launch ACCELA: {exc}")
+        import traceback
+        logger.warn(f"LuaTools: Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -754,29 +788,18 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
         except Exception as depot_exc:
             logger.warn(f"LuaTools: depotcache extraction failed: {depot_exc}")
 
-        # LuaTools no longer extracts the lua file itself; ACCELA handles the zip.
-        # We just need to mark it as "installed" so LuaTools knows about it?
-        # Actually, if we don't put a .lua file in stplug-in, LuaTools frontend might not see it as installed.
-        # But per user request "dont extract the .lua file", we will skip that.
-        # We'll just rely on ACCELA.
-        
-        logger.log(f"LuaTools: Skipping .lua extraction per configuration. Handing off to ACCELA.")
+        logger.log(f"LuaTools: Zip ready for ACCELA extraction. Handing off to ACCELA.")
         _set_download_state(appid, {"status": "installing"})
-        
-        # We need to set some "installedPath" so the frontend resolves the promise?
-        # Or maybe we just leave it.
-        # Let's set it to the zip path for now so it doesn't crash anything expecting a string.
         _set_download_state(appid, {"installedPath": zip_path})
 
     # Launch ACCELA with the zip so it can download actual game content.
     # The zip is kept alive for ACCELA; it will manage its own cleanup.
     accela_launched = _launch_accela_download(appid, zip_path)
     if not accela_launched:
-        # ACCELA not available – clean up the zip ourselves
-        try:
-            os.remove(zip_path)
-        except Exception:
-            pass
+        logger.error(f"LuaTools: Failed to launch ACCELA for appid={appid}. Zip available at: {zip_path}")
+        _set_download_state(appid, {"status": "failed", "error": "ACCELA launch failed - check logs"})
+        # Don't delete the zip - user may need to launch ACCELA manually
+        return
 
 
 def _is_download_cancelled(appid: int) -> bool:
