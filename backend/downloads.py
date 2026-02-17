@@ -26,7 +26,6 @@ from http_client import ensure_http_client
 from logger import logger
 from paths import backend_path, public_path
 from steam_utils import detect_steam_install_path, has_lua_for_app
-from linux_platform import get_stplugin_dir, get_depotcache_dir, get_accela_run_script
 from utils import count_apis, ensure_temp_download_dir, normalize_manifest_text, read_text, write_text
 
 DOWNLOAD_STATE: Dict[int, Dict[str, any]] = {}
@@ -225,175 +224,6 @@ def browse_for_launcher() -> str:
         logger.error(f"LuaTools: File picker error: {e}")
         return json.dumps({"success": False, "error": str(e)})
 
-
-
-def _fix_game_permissions_background(appid: int) -> None:
-    """Background task to fix executable permissions on extracted game files.
-    
-    Waits for ACCELA to finish extracting, then applies execute permissions.
-    """
-    import stat
-    from steam_utils import get_game_install_path_response
-    
-    max_wait_time = 300  # 5 minutes max
-    check_interval = 2   # Check every 2 seconds
-    elapsed = 0
-    
-    while elapsed < max_wait_time:
-        try:
-            game_install_info = get_game_install_path_response(appid)
-            if game_install_info.get("error"):
-                elapsed += check_interval
-                time.sleep(check_interval)
-                continue
-                
-            install_path = game_install_info.get("installPath", "")
-            if not install_path or not os.path.exists(install_path):
-                elapsed += check_interval
-                time.sleep(check_interval)
-                continue
-            
-            # Game directory exists - check if files have been extracted
-            try:
-                files_in_dir = os.listdir(install_path)
-                if len(files_in_dir) > 0:
-                    # Files found - likely ACCELA has finished, now fix permissions
-                    logger.log(f"LuaTools: Fixing permissions for {appid} in {install_path}")
-                    count = 0
-                    for root, dirs, files in os.walk(install_path):
-                        for name in files:
-                            file_path = os.path.join(root, name)
-                            try:
-                                st = os.stat(file_path)
-                                # Add execute permissions for user, group, and others
-                                os.chmod(file_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-                                count += 1
-                            except Exception:
-                                pass  # Skip files we can't modify
-                    
-                    logger.log(f"LuaTools: Fixed execute permissions on {count} files for appid={appid}")
-                    return
-            except Exception as e:
-                logger.warn(f"LuaTools: Error during permission fix for {appid}: {e}")
-                return
-        except Exception as e:
-            logger.warn(f"LuaTools: Unexpected error in permission fix background task: {e}")
-            return
-        
-        elapsed += check_interval
-        time.sleep(check_interval)
-    
-    logger.warn(f"LuaTools: Timeout waiting for game files extraction for appid={appid}")
-
-
-def _launch_accela_download(appid: int, zip_path: str) -> bool:
-    """Launch ACCELA with the downloaded zip to perform the actual game download.
-
-    Returns True if ACCELA was launched, False otherwise.
-    """
-    import subprocess
-    import shutil
-    from linux_platform import get_accela_dir
-
-    run_script = get_accela_run_script()
-    if not run_script:
-        logger.warn("LuaTools: ACCELA not found – skipping depot download")
-        return False
-
-    if not os.path.isfile(zip_path):
-        logger.warn(f"LuaTools: Zip file missing for ACCELA: {zip_path}")
-        return False
-
-    try:
-        # Verify zip file is readable and has content
-        if os.path.getsize(zip_path) == 0:
-            logger.warn(f"LuaTools: Zip file is empty: {zip_path}")
-            return False
-
-        logger.log(f"LuaTools: Zip file ready for ACCELA: {zip_path} (size: {os.path.getsize(zip_path)} bytes)")
-
-        # Make sure run.sh is executable
-        os.chmod(run_script, 0o755)
-        logger.log(f"LuaTools: ACCELA run script permissions set: {run_script}")
-
-        # Use the ACCELA directory as the working directory so ACCELA
-        # can correctly detect its own path and resources.
-        accela_dir = get_accela_dir() or os.path.dirname(run_script)
-        logger.log(f"LuaTools: ACCELA directory: {accela_dir}")
-
-        # Verify ACCELA directory exists
-        if not os.path.isdir(accela_dir):
-            logger.warn(f"LuaTools: ACCELA directory does not exist: {accela_dir}")
-            return False
-
-        # Verify run script exists and is executable
-        if not os.path.isfile(run_script):
-            logger.warn(f"LuaTools: ACCELA run script not found: {run_script}")
-            return False
-
-        cmd = [run_script, zip_path]
-        logger.log(f"LuaTools: Launching ACCELA for appid={appid}: {' '.join(cmd)} (cwd={accela_dir})")
-
-        # Create a temporary log file to capture ACCELA errors
-        stderr_log = os.path.join(ensure_temp_download_dir(), f"accela_{appid}_errors.log")
-        
-        # Prepare clean environment: remove Millennium-related variables that conflict with ACCELA
-        env = os.environ.copy()
-        # Remove LD_PRELOAD which causes library conflicts with ACCELA's PyQt6
-        env.pop("LD_PRELOAD", None)
-        # Also remove other Millennium/dev environment variables that might interfere
-        for key in ["QT_LD_PRELOAD", "MILLENNIUM_BRIDGE", "MILLENNIUM_TOKEN"]:
-            env.pop(key, None)
-        
-        # Run with stderr captured to file so we can debug failures
-        with open(stderr_log, "w") as stderr_file:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=accela_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=stderr_file,
-                start_new_session=True,  # detach from our process tree
-                env=env,  # Use cleaned environment
-            )
-        
-        # Give the process a moment to fail if it's going to fail immediately
-        time.sleep(1)
-        
-        # Check if process is still running or if it exited
-        poll_result = proc.poll()
-        if poll_result is not None:
-            # Process has already exited - this is a failure
-            # Try to read error log
-            stderr_output = ""
-            try:
-                with open(stderr_log, "r") as f:
-                    stderr_output = f.read()
-            except Exception:
-                pass
-            
-            if stderr_output:
-                logger.error(f"LuaTools: ACCELA exited with code {poll_result}. Error output: {stderr_output}")
-            else:
-                logger.error(f"LuaTools: ACCELA process exited immediately with code {poll_result} - launch failed")
-            return False
-        
-        # Process is still running - this is success
-        logger.log(f"LuaTools: ACCELA launched successfully for appid={appid} - process running in background")
-        
-        # Start background task to fix file permissions after ACCELA finishes extraction
-        perm_fix_thread = threading.Thread(
-            target=_fix_game_permissions_background, 
-            args=(appid,), 
-            daemon=True
-        )
-        perm_fix_thread.start()
-        
-        return True
-    except Exception as exc:
-        logger.error(f"LuaTools: Failed to launch ACCELA: {exc}")
-        import traceback
-        logger.warn(f"LuaTools: Traceback: {traceback.format_exc()}")
-        return False
 
 
 def _set_download_state(appid: int, update: dict) -> None:
@@ -780,21 +610,64 @@ def get_games_database() -> str:
 
 
 def _process_and_install_lua(appid: int, zip_path: str) -> None:
-    """Process downloaded zip and install lua file into stplug-in directory."""
+    """Process downloaded zip via launcher and install lua file into stplug-in directory."""
     import zipfile
 
     if _is_download_cancelled(appid):
         raise RuntimeError("cancelled")
 
     base_path = detect_steam_install_path() or Millennium.steam_path()
-    target_dir = get_stplugin_dir(base_path) or os.path.join(base_path or "", "config", "stplug-in")
+    target_dir = os.path.join(base_path or "", "config", "stplug-in")
     os.makedirs(target_dir, exist_ok=True)
 
+    # --- Launch via configurable launcher (Bifrost by default) ---
+    launcher_bin = load_launcher_path()
+    logger.log(f"LuaTools: Using launcher at: {launcher_bin}")
+
+    if os.path.exists(launcher_bin):
+        logger.log(f"LuaTools: Sending {zip_path} to launcher...")
+        try:
+            # Ensure execute permission
+            if not os.access(launcher_bin, os.X_OK):
+                os.chmod(launcher_bin, 0o755)
+
+            # Clean environment to avoid Qt6/Steam library conflicts
+            clean_env = os.environ.copy()
+            clean_env.pop("LD_LIBRARY_PATH", None)  # Remove Steam's libs (fixes Qt6 symbol error)
+            clean_env.pop("LD_PRELOAD", None)        # Remove Millennium overlay (fixes ld.so spam)
+            clean_env.pop("STEAM_RUNTIME", None)     # Ensure system libs are used
+
+            proc = subprocess.Popen(
+                [launcher_bin, zip_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=clean_env,
+            )
+
+            stdout, stderr = proc.communicate()
+
+            if stdout:
+                logger.log(f"Launcher Output: {stdout[:200]}...")
+            if stderr:
+                logger.warn(f"Launcher Stderr: {stderr}")
+
+            if proc.returncode != 0:
+                logger.warn(f"Launcher exited with error code: {proc.returncode}")
+            else:
+                logger.log("Launcher finished successfully.")
+
+        except Exception as e:
+            logger.error(f"LuaTools: Failed to run launcher: {e}")
+    else:
+        logger.warn(f"LuaTools: Launcher not found at {launcher_bin}")
+
+    # Extract manifests and lua files from zip
     with zipfile.ZipFile(zip_path, "r") as archive:
         names = archive.namelist()
 
         try:
-            depotcache_dir = get_depotcache_dir(base_path) or os.path.join(base_path or "", "depotcache")
+            depotcache_dir = os.path.join(base_path or "", "depotcache")
             os.makedirs(depotcache_dir, exist_ok=True)
             for name in names:
                 try:
@@ -812,18 +685,61 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
         except Exception as depot_exc:
             logger.warn(f"LuaTools: depotcache extraction failed: {depot_exc}")
 
-        logger.log(f"LuaTools: Zip ready for ACCELA extraction. Handing off to ACCELA.")
-        _set_download_state(appid, {"status": "installing"})
-        _set_download_state(appid, {"installedPath": zip_path})
+        candidates = []
+        for name in names:
+            pure = os.path.basename(name)
+            if re.fullmatch(r"\d+\.lua", pure):
+                candidates.append(name)
 
-    # Launch ACCELA with the zip so it can download actual game content.
-    # The zip is kept alive for ACCELA; it will manage its own cleanup.
-    accela_launched = _launch_accela_download(appid, zip_path)
-    if not accela_launched:
-        logger.error(f"LuaTools: Failed to launch ACCELA for appid={appid}. Zip available at: {zip_path}")
-        _set_download_state(appid, {"status": "failed", "error": "ACCELA launch failed - check logs"})
-        # Don't delete the zip - user may need to launch ACCELA manually
-        return
+        if _is_download_cancelled(appid):
+            raise RuntimeError("cancelled")
+
+        chosen = None
+        preferred = f"{appid}.lua"
+        for name in candidates:
+            if os.path.basename(name) == preferred:
+                chosen = name
+                break
+        if chosen is None and candidates:
+            chosen = candidates[0]
+        if not chosen:
+            raise RuntimeError("No numeric .lua file found in zip")
+
+        data = archive.read(chosen)
+        try:
+            text = data.decode("utf-8")
+        except Exception:
+            text = data.decode("utf-8", errors="replace")
+
+        processed_lines = []
+        for line in text.splitlines(True):
+            if re.match(r"^\s*setManifestid\(", line) and not re.match(r"^\s*--", line):
+                line = re.sub(r"^(\s*)", r"\1--", line)
+            processed_lines.append(line)
+        processed_text = "".join(processed_lines)
+
+        _set_download_state(appid, {"status": "installing"})
+        dest_file = os.path.join(target_dir, f"{appid}.lua")
+        if _is_download_cancelled(appid):
+            raise RuntimeError("cancelled")
+        with open(dest_file, "w", encoding="utf-8") as output:
+            output.write(processed_text)
+        logger.log(f"LuaTools: Installed lua -> {dest_file}")
+        _set_download_state(appid, {"installedPath": dest_file})
+
+    try:
+        os.remove(zip_path)
+    except Exception:
+        try:
+            for _ in range(3):
+                time.sleep(0.2)
+                try:
+                    os.remove(zip_path)
+                    break
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
 
 def _is_download_cancelled(appid: int) -> bool:
@@ -1052,7 +968,7 @@ def delete_luatools_for_app(appid: int) -> str:
         return json.dumps({"success": False, "error": "Invalid appid"})
 
     base = detect_steam_install_path() or Millennium.steam_path()
-    target_dir = get_stplugin_dir(base) or os.path.join(base or "", "config", "stplug-in")
+    target_dir = os.path.join(base or "", "config", "stplug-in")
     paths = [
         os.path.join(target_dir, f"{appid}.lua"),
         os.path.join(target_dir, f"{appid}.lua.disabled"),
@@ -1124,7 +1040,7 @@ def get_installed_lua_scripts() -> str:
         if not base_path:
             return json.dumps({"success": False, "error": "Could not find Steam installation path"})
 
-        target_dir = get_stplugin_dir(base_path) or os.path.join(base_path, "config", "stplug-in")
+        target_dir = os.path.join(base_path, "config", "stplug-in")
         if not os.path.exists(target_dir):
             return json.dumps({"success": True, "scripts": []})
 
