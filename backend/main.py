@@ -941,52 +941,69 @@ def GetGamesDatabase(contentScriptQuery: str = "") -> str:
 # ==========================================
 
 class Plugin:
+    def __init__(self) -> None:
+        self._init_thread: threading.Thread | None = None
+
     def _front_end_loaded(self):
         _copy_webkit_files()
+
+    def _async_initialize(self) -> None:
+        try:
+            logger.log("LuaTools: starting async initialization")
+
+            try:
+                detect_steam_install_path()
+            except Exception as exc:
+                logger.warn(f"LuaTools: steam path detection failed: {exc}")
+
+            ensure_http_client("InitApis")
+            ensure_temp_download_dir()
+
+            try:
+                message = apply_pending_update_if_any()
+                if message:
+                    store_last_message(message)
+            except Exception as exc:
+                logger.warn(f"AutoUpdate: apply pending failed: {exc}")
+
+            try:
+                init_applist()
+            except Exception as exc:
+                logger.warn(f"LuaTools: Applist initialization failed: {exc}")
+
+            # --- INICIALIZACAO DA GAMES DB ---
+            try:
+                init_games_db()
+            except Exception as exc:
+                logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
+            # ---------------------------------
+
+            _copy_webkit_files()
+            _inject_webkit_files()
+
+            try:
+                result = InitApis("boot")
+                logger.log(f"InitApis (boot) return: {result}")
+            except Exception as exc:
+                logger.error(f"InitApis (boot) failed: {exc}")
+
+            try:
+                start_auto_update_background_check()
+            except Exception as exc:
+                logger.warn(f"AutoUpdate: start background check failed: {exc}")
+        except Exception as exc:
+            logger.error(f"LuaTools: async init failed: {exc}")
 
     def _load(self):
         logger.log(f"bootstrapping LuaTools plugin, millennium {Millennium.version()}")
 
-        try:
-            detect_steam_install_path()
-        except Exception as exc:
-            logger.warn(f"LuaTools: steam path detection failed: {exc}")
-
-        ensure_http_client("InitApis")
-        ensure_temp_download_dir()
-
-        try:
-            message = apply_pending_update_if_any()
-            if message:
-                store_last_message(message)
-        except Exception as exc:
-            logger.warn(f"AutoUpdate: apply pending failed: {exc}")
-
-        try:
-            init_applist()
-        except Exception as exc:
-            logger.warn(f"LuaTools: Applist initialization failed: {exc}")
-
-        # --- INICIALIZAÇÃO DA GAMES DB ---
-        try:
-            init_games_db()
-        except Exception as exc:
-            logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
-        # ---------------------------------
-
-        _copy_webkit_files()
-        _inject_webkit_files()
-
-        try:
-            result = InitApis("boot")
-            logger.log(f"InitApis (boot) return: {result}")
-        except Exception as exc:
-            logger.error(f"InitApis (boot) failed: {exc}")
-
-        try:
-            start_auto_update_background_check()
-        except Exception as exc:
-            logger.warn(f"AutoUpdate: start background check failed: {exc}")
+        if self._init_thread is None or not self._init_thread.is_alive():
+            self._init_thread = threading.Thread(
+                target=self._async_initialize,
+                name="LuaToolsInit",
+                daemon=True,
+            )
+            self._init_thread.start()
 
         Millennium.ready()
 
