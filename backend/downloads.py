@@ -334,14 +334,18 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         cmd = [run_script, zip_path]
         logger.log(f"LuaTools: Launching ACCELA for appid={appid}: {' '.join(cmd)} (cwd={accela_dir})")
 
-        # Use DEVNULL for cleaner detachment - don't use pipes with start_new_session
-        proc = subprocess.Popen(
-            cmd,
-            cwd=accela_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,  # detach from our process tree
-        )
+        # Create a temporary log file to capture ACCELA errors
+        stderr_log = os.path.join(ensure_temp_download_dir(), f"accela_{appid}_errors.log")
+        
+        # Run with stderr captured to file so we can debug failures
+        with open(stderr_log, "w") as stderr_file:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=accela_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_file,
+                start_new_session=True,  # detach from our process tree
+            )
         
         # Give the process a moment to fail if it's going to fail immediately
         time.sleep(1)
@@ -350,7 +354,18 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         poll_result = proc.poll()
         if poll_result is not None:
             # Process has already exited - this is a failure
-            logger.error(f"LuaTools: ACCELA process exited immediately with code {poll_result} - launch failed")
+            # Try to read error log
+            stderr_output = ""
+            try:
+                with open(stderr_log, "r") as f:
+                    stderr_output = f.read()
+            except Exception:
+                pass
+            
+            if stderr_output:
+                logger.error(f"LuaTools: ACCELA exited with code {poll_result}. Error output: {stderr_output}")
+            else:
+                logger.error(f"LuaTools: ACCELA process exited immediately with code {poll_result} - launch failed")
             return False
         
         # Process is still running - this is success
