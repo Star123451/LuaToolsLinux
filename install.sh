@@ -30,7 +30,7 @@ echo -e "${BOLD}║   by StarWarsK & geovanygrdt         ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
 echo ""
 
-# --- Check for required tools ---
+# Required tools check
 for cmd in git python3; do
     if ! command -v "$cmd" &>/dev/null; then
         fail "'$cmd' is not installed. Please install it first."
@@ -42,32 +42,6 @@ ok "Required tools found (git, python3)"
 if ! command -v curl &>/dev/null; then
     warn "curl not found, some auto-installers may fail"
     echo -e "  Install with: ${CYAN}sudo apt install curl${NC}"
-fi
-
-# --- Check for 7zip (needed for SLSsteam extraction) ---
-if ! command -v 7z &>/dev/null; then
-    warn "7zip not found, will install when needed for SLSsteam"
-    echo -e "  You can pre-install with: ${CYAN}sudo apt install 7zip${NC}"
-fi
-
-# --- Check and install build tools (needed for SLSsteam) ---
-if ! command -v make &>/dev/null || ! command -v gcc &>/dev/null; then
-    if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-        info "Installing build-essential..."
-        sudo apt update -qq && sudo apt install -y build-essential
-        ok "Build tools installed"
-    else
-        warn "Build tools (make/gcc) not found - needed for SLSsteam"
-        echo -e "  Install with: ${CYAN}sudo apt install build-essential${NC}"
-    fi
-fi
-
-# --- Check for 32-bit support and enable if needed ---
-if ! dpkg --print-foreign-architectures 2>/dev/null | grep -q "i386"; then
-    if command -v sudo &>/dev/null && command -v dpkg &>/dev/null; then
-        info "Enabling 32-bit architecture support..."
-        sudo dpkg --add-architecture i386 && sudo apt update -qq
-    fi
 fi
 
 # --- Install Millennium if not found ---
@@ -88,105 +62,16 @@ install_millennium() {
     fi
 }
 
-# --- Install SLSsteam if not found ---
-install_slssteam() {
-    info "Installing SLSsteam..."
+# --- Install Headcrab (replaces SLSsteam) ---
+install_headcrab() {
+    info "Installing Headcrab..."
     
-    # Check if 7z is available
-    if ! command -v 7z &>/dev/null; then
-        warn "7z is required to extract SLSsteam"
-        if command -v sudo &>/dev/null && command -v apt &>/dev/null; then
-            info "Installing 7zip..."
-            sudo apt update -qq && sudo apt install -y 7zip
-        else
-            fail "Please install 7zip: sudo apt install 7zip"
-        fi
-    fi
-    
-    # Create temp directory for download
-    local temp_dir=$(mktemp -d)
-    info "  Downloading SLSsteam (this may take a minute)..."
-    
-    # Download latest SLSsteam release - use releases/latest redirect
-    cd "$temp_dir"
-    
-    # Try to download from releases/latest
-    if ! curl -fsSL -o SLSsteam-Any.7z -L "https://github.com/AceSLS/SLSsteam/releases/download/latest/SLSsteam-Any.7z"; then
-        warn "Failed to download SLSsteam from releases"
-        echo -e "  Manual install: ${CYAN}https://github.com/AceSLS/SLSsteam/releases${NC}"
-        cd /
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    ok "Downloaded SLSsteam"
-    
-    # Check if 7z file exists and has content
-    if [ ! -s "SLSsteam-Any.7z" ]; then
-        warn "Downloaded file is empty or not found"
-        cd /
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # Extract - properly check exit code
-    info "  Extracting..."
-    local extract_output=$(7z x SLSsteam-Any.7z 2>&1)
-    local extract_code=$?
-    
-    if [ $extract_code -ne 0 ]; then
-        warn "7z extraction failed with code $extract_code"
-        echo -e "  ${YELLOW}7z output:${NC}"
-        echo "$extract_output" | head -20
-        cd /
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    ok "Extracted successfully"
-    
-    # Show what was extracted
-    info "  Checking extracted contents..."
-    local file_count=$(find "$temp_dir" -type f | wc -l)
-    info "  Found $file_count files in extraction"
-    
-    # Find setup.sh
-    local setup_script
-    if [ -f "setup.sh" ]; then
-        setup_script="./setup.sh"
-        info "  Found setup.sh in current directory"
-    else
-        setup_script=$(find "$temp_dir" -name "setup.sh" -type f 2>/dev/null | head -1)
-        if [ -z "$setup_script" ]; then
-            warn "setup.sh not found in extracted files"
-            echo -e "  ${YELLOW}Files found:${NC}"
-            find "$temp_dir" -type f
-            cd /
-            rm -rf "$temp_dir"
-            return 1
-        fi
-        info "  Found setup.sh at: $setup_script"
-    fi
-    
-    # Change to directory containing setup.sh and run it
-    local setup_dir=$(dirname "$setup_script")
-    cd "$setup_dir" || {
-        warn "Could not cd to $setup_dir"
-        cd /
-        rm -rf "$temp_dir"
-        return 1
-    }
-    
-    info "  Running setup.sh install from: $setup_dir"
-    if bash setup.sh install; then
-        ok "SLSsteam installed successfully"
-        cd /
-        rm -rf "$temp_dir"
+    if curl -fsSL "https://raw.githubusercontent.com/Deadboy666/h3adcr-b/refs/heads/main/headcrab.sh" | bash; then
+        ok "Headcrab installed successfully"
         return 0
     else
-        warn "SLSsteam setup.sh failed"
-        cd /
-        rm -rf "$temp_dir"
+        warn "Headcrab installation failed"
+        echo -e "  Manual install: ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
         return 1
     fi
 }
@@ -290,30 +175,29 @@ fi
 
 ok "LuaTools installation complete"
 
-# --- Install SLSsteam (only if not found, or ask to reinstall) ---
+# --- Install Headcrab (only if not found, or ask to reinstall) ---
 echo ""
-SLSSTEAM_FOUND=false
-SLSSTEAM_PATH=""
-for p in "$HOME/.local/share/SLSsteam" "$HOME/SLSsteam" "/opt/SLSsteam"; do
-    if [ -f "$p/SLSsteam.so" ]; then
-        SLSSTEAM_FOUND=true
-        SLSSTEAM_PATH="$p"
+HEADCRAB_FOUND=false
+HEADCRAB_PATH=""
+for p in "$HOME/.local/share/Headcrab" "$HOME/Headcrab" "/opt/Headcrab"; do
+    if [ -d "$p" ]; then
+        HEADCRAB_FOUND=true
+        HEADCRAB_PATH="$p"
         break
     fi
 done
-if [ "$SLSSTEAM_FOUND" = true ]; then
-    ok "SLSsteam is already installed at $SLSSTEAM_PATH."
-    read -rp "  Do you want to redownload/reinstall SLSsteam? [y/N] " REINSTALL_SLS
-    if [[ "${REINSTALL_SLS,,}" == "y" ]]; then
-        info "Reinstalling SLSsteam..."
-        rm -rf "$SLSSTEAM_PATH"
-        install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
+if [ "$HEADCRAB_FOUND" = true ]; then
+    ok "Headcrab is already installed at $HEADCRAB_PATH."
+    read -rp "  Do you want to redownload/reinstall Headcrab? [y/N] " REINSTALL_HEADCRAB
+    if [[ "${REINSTALL_HEADCRAB,,}" == "y" ]]; then
+        info "Reinstalling Headcrab..."
+        install_headcrab || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
     else
-        info "Keeping existing SLSsteam installation."
+        info "Keeping existing Headcrab installation."
     fi
 else
-    info "SLSsteam not found - installing..."
-    install_slssteam || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/AceSLS/SLSsteam${NC}"
+    info "Headcrab not found - installing..."
+    install_headcrab || echo -e "  ${YELLOW}Manual install:${NC} ${CYAN}https://github.com/Deadboy666/h3adcr-b${NC}"
 fi
 
 # --- Install ACCELA (only if not found, or ask to reinstall) ---
@@ -360,15 +244,16 @@ if [ -d "$HOME/.local/share/Steam/steamui/skins" ] || [ -d "$HOME/.steam/steam/s
 else
     echo -e "  ${RED}✗${NC} Millennium ${YELLOW}(required - please restart Steam after install)${NC}"
 fi
-SLSSTEAM_STATUS=false
-for p in "$HOME/.local/share/SLSsteam" "$HOME/SLSsteam" "/opt/SLSsteam"; do
-    if [ -f "$p/SLSsteam.so" ]; then
-        echo -e "  ${GREEN}✓${NC} SLSsteam (at $p)"
-        SLSSTEAM_STATUS=true
+
+HEADCRAB_STATUS=false
+for p in "$HOME/.local/share/Headcrab" "$HOME/Headcrab" "/opt/Headcrab"; do
+    if [ -d "$p" ]; then
+        echo -e "  ${GREEN}✓${NC} Headcrab (at $p)"
+        HEADCRAB_STATUS=true
         break
     fi
 done
-[ "$SLSSTEAM_STATUS" = false ] && echo -e "  ${RED}✗${NC} SLSsteam ${YELLOW}(required for patching)${NC}"
+[ "$HEADCRAB_STATUS" = false ] && echo -e "  ${RED}✗${NC} Headcrab ${YELLOW}(required for SteamDB patching)${NC}"
 
 ACCELA_STATUS=false
 for p in "$HOME/.local/share/ACCELA" "$HOME/accela"; do
