@@ -337,6 +337,14 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
         # Create a temporary log file to capture ACCELA errors
         stderr_log = os.path.join(ensure_temp_download_dir(), f"accela_{appid}_errors.log")
         
+        # Prepare clean environment: remove Millennium-related variables that conflict with ACCELA
+        env = os.environ.copy()
+        # Remove LD_PRELOAD which causes library conflicts with ACCELA's PyQt6
+        env.pop("LD_PRELOAD", None)
+        # Also remove other Millennium/dev environment variables that might interfere
+        for key in ["QT_LD_PRELOAD", "MILLENNIUM_BRIDGE", "MILLENNIUM_TOKEN"]:
+            env.pop(key, None)
+        
         # Run with stderr captured to file so we can debug failures
         with open(stderr_log, "w") as stderr_file:
             proc = subprocess.Popen(
@@ -345,6 +353,7 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
                 stdout=subprocess.DEVNULL,
                 stderr=stderr_file,
                 start_new_session=True,  # detach from our process tree
+                env=env,  # Use cleaned environment
             )
         
         # Give the process a moment to fail if it's going to fail immediately
