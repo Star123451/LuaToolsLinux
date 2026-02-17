@@ -53,14 +53,17 @@ for dir in "${candidates[@]}"; do
 done
 
 if [ -z "$MILLENNIUM_DIR" ]; then
-    fail "Could not find Millennium plugins directory. Is Millennium installed?"
+    # Allow plugin-only install without prior setup by creating the default path.
+    MILLENNIUM_DIR="$HOME/.local/share/millennium/plugins"
+    mkdir -p "$MILLENNIUM_DIR"
+    warn "Millennium plugins directory not detected; created $MILLENNIUM_DIR"
 fi
 
 INSTALL_DIR="$MILLENNIUM_DIR/$PLUGIN_NAME"
 info "LuaTools directory: $INSTALL_DIR"
 
 if [ ! -d "$INSTALL_DIR" ]; then
-    fail "LuaTools not found at $INSTALL_DIR. Please run install.sh first."
+    warn "LuaTools not found at $INSTALL_DIR. Doing a fresh plugin-only install."
 fi
 
 # --- Update LuaTools ---
@@ -81,12 +84,18 @@ if [ -d ".git" ]; then
             fail "Failed to clone repository"
         fi
     fi
-else
+elif [ -d "$INSTALL_DIR" ]; then
     warn "Not a git repository. Backing up and re-installing..."
     cd ..
     mv "$INSTALL_DIR" "${INSTALL_DIR}.bak.$(date +%s)"
     if git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"; then
         ok "Fresh install complete (old files backed up)"
+    else
+        fail "Failed to clone repository"
+    fi
+else
+    if git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"; then
+        ok "Fresh install complete"
     else
         fail "Failed to clone repository"
     fi
