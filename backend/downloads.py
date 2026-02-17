@@ -9,6 +9,8 @@ import re
 import threading
 import time
 import subprocess
+import shutil
+import glob
 from typing import Dict, Any
 
 import Millennium  # type: ignore
@@ -504,12 +506,10 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
     os.makedirs(target_dir, exist_ok=True)
 
     # --- INTEGRAÇÃO LAUNCHER CUSTOMIZÁVEL ---
-    # Carrega o caminho salvo ou usa o padrão
-    launcher_bin = load_launcher_path()
+    launcher_bin = _resolve_launcher_path()
 
-    logger.log(f"LuaTools: Usando launcher em: {launcher_bin}")
-
-    if os.path.exists(launcher_bin):
+    if launcher_bin:
+        logger.log(f"LuaTools: Using launcher at: {launcher_bin}")
         logger.log(f"LuaTools: Enviando {zip_path} para o Launcher...")
         try:
             # Garante permissão de execução
@@ -542,7 +542,7 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
         except Exception as e:
             logger.error(f"LuaTools: Falha ao executar Launcher: {e}")
     else:
-        logger.warn(f"LuaTools: Launcher não encontrado em {launcher_bin}")
+        logger.warn("LuaTools: Launcher not found. Set the path in Settings > External Launcher.")
     # --------------------------
 
     # Extração do arquivo .lua (Mantida como garantia e para registro)
@@ -1021,6 +1021,108 @@ def load_launcher_path() -> str:
     except Exception as e:
         logger.warn(f"LuaTools: Erro ao ler caminho do launcher: {e}")
     return default_path
+
+
+def _normalize_launcher_candidate(path: str) -> str:
+    if not path:
+        return ""
+    if os.path.isdir(path):
+        for name in ("Accela.AppImage", "accela.AppImage", "Accela", "accela", "Bifrost", "bifrost"):
+            candidate = os.path.join(path, name)
+            if os.path.exists(candidate):
+                return candidate
+        return ""
+    if os.path.exists(path):
+        return path
+    return ""
+
+
+def _resolve_launcher_path() -> str:
+    candidates = []
+
+    saved_path = load_launcher_path()
+    if saved_path:
+        candidates.append(saved_path)
+
+    home = os.path.expanduser("~")
+    candidates.extend(
+        [
+            os.path.join(home, ".local", "share", "Accela", "Accela.AppImage"),
+            os.path.join(home, ".local", "share", "Accela", "Accela"),
+            os.path.join(home, ".local", "share", "Accela", "accela"),
+            os.path.join(home, ".local", "share", "Accela", "bin"),
+            os.path.join(home, ".local", "share", "Accela", "bin", "accela"),
+            os.path.join(home, ".local", "share", "Accela", "bin", "Accela"),
+            os.path.join(home, ".local", "share", "Bifrost", "bin", "Bifrost"),
+            os.path.join(home, ".local", "share", "Bifrost", "bin", "bifrost"),
+            os.path.join(home, ".local", "share", "Bifrost", "bin"),
+            os.path.join(home, ".local", "bin", "accela"),
+            os.path.join(home, ".local", "bin", "bifrost"),
+            os.path.join(home, "bin", "accela"),
+            os.path.join(home, "bin", "bifrost"),
+            os.path.join(home, "Applications", "Accela"),
+            os.path.join(home, "Applications", "accela"),
+            os.path.join(home, "Applications", "Bifrost"),
+            os.path.join(home, "Applications", "bifrost"),
+            os.path.join(home, "accela", "Accela"),
+            os.path.join(home, "accela", "accela"),
+            os.path.join(home, "bifrost", "Bifrost"),
+            os.path.join(home, "bifrost", "bifrost"),
+            "/opt/Accela/Accela",
+            "/opt/Accela/accela",
+            "/opt/Accela/bin/Accela",
+            "/opt/Accela/bin/accela",
+            "/opt/Bifrost/Bifrost",
+            "/opt/Bifrost/bifrost",
+            "/opt/Bifrost/bin/Bifrost",
+            "/opt/Bifrost/bin/bifrost",
+            "/usr/local/share/Accela/Accela",
+            "/usr/local/share/Accela/accela",
+            "/usr/local/share/Bifrost/Bifrost",
+            "/usr/local/share/Bifrost/bifrost",
+            "/usr/local/bin/accela",
+            "/usr/bin/accela",
+            "/usr/local/bin/bifrost",
+            "/usr/bin/bifrost",
+        ]
+    )
+
+    for binary in ("accela", "Accela", "bifrost", "Bifrost"):
+        found = shutil.which(binary)
+        if found:
+            candidates.append(found)
+
+    downloads_dir = os.path.join(home, "Downloads")
+    for pattern in (
+        "Accela*.AppImage",
+        "accela*.AppImage",
+        "ACCELA*.AppImage",
+        "Bifrost*.AppImage",
+        "bifrost*.AppImage",
+    ):
+        for match in glob.glob(os.path.join(downloads_dir, pattern)):
+            candidates.append(match)
+
+    for base in (
+        os.path.join(home, ".local", "share"),
+        os.path.join(home, "Applications"),
+        os.path.join(home, "Games"),
+        os.path.join(home, "opt"),
+        "/opt",
+        "/usr/local/share",
+        "/usr/share",
+    ):
+        for name in ("Accela", "accela", "Bifrost", "bifrost"):
+            candidates.append(os.path.join(base, name))
+            candidates.append(os.path.join(base, name, "bin"))
+            candidates.append(os.path.join(base, name, "bin", name))
+
+    for candidate in candidates:
+        resolved = _normalize_launcher_candidate(candidate)
+        if resolved:
+            return resolved
+
+    return ""
 
 def save_launcher_path_config(path: str) -> str:
     """Salva o caminho do launcher escolhido pelo usuário."""
