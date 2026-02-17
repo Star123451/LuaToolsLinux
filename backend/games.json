@@ -1,0 +1,716 @@
+{
+    "10090": {
+        "name": "Call of Duty: World at War",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "10180": {
+        "name": "Call of Duty: Modern Warfare 2 (2009)",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "39210": {
+        "name": "FINAL FANTASY XIV ONLINE",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "42700": {
+        "name": "Call of Duty: Black Ops",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "48190": {
+        "name": "Assassin's Creed Brotherhood",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "108600": {
+        "name": "Project Zomboid",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "115300": {
+        "name": "Call of Duty: Modern Warfare 3 (2011)",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "201870": {
+        "name": "Assassin's Creed Revelations",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "202970": {
+        "name": "Call of Duty: Black Ops II",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "208480": {
+        "name": "Assassin's Creed III",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "209160": {
+        "name": "Call of Duty: Ghosts",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "209650": {
+        "name": "Call of Duty: Advanced Warfare",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "218620": {
+        "name": "PAYDAY 2",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "221100": {
+        "name": "DayZ",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": true
+    },
+    "239140": {
+        "name": "Dying Light",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "240460": {
+        "name": "WWE 2K15",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "242760": {
+        "name": "The Forest",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "252490": {
+        "name": "Rust",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "261550": {
+        "name": "Mount & Blade II: Bannerlord",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "271590": {
+        "name": "Grand Theft Auto V Legacy",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "284160": {
+        "name": "BeamNG.drive",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "289070": {
+        "name": "Civilization VI",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "292030": {
+        "name": "The Witcher 3: Wild Hunt",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "294100": {
+        "name": "RimWorld",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "311210": {
+        "name": "Call of Duty: Black Ops III",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "311560": {
+        "name": "Assassin's Creed Rogue",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "322170": {
+        "name": "Geometry Dash",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "360430": {
+        "name": "Mafia III: Definitive Edition",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "367520": {
+        "name": "Hollow Knight",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "368500": {
+        "name": "Assassin's Creed Syndicate",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "381210": {
+        "name": "Dead by Daylight",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "385730": {
+        "name": "WWE 2K16",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "394360": {
+        "name": "Hearts of Iron IV",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "413150": {
+        "name": "Stardew Valley",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "431960": {
+        "name": "Wallpaper Engine",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "510510": {
+        "name": "WWE 2K17",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "534380": {
+        "name": "Dying light 2: Stay Human",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "553850": {
+        "name": "Helldivers 2",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "582010": {
+        "name": "Monster Hunter: World",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "637650": {
+        "name": "FINAL FANTASY XV WINDOWS EDITION",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "664430": {
+        "name": "WWE 2K18",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "668580": {
+        "name": "Atomic Heart",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "801800": {
+        "name": "Atomfall",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "812140": {
+        "name": "Assassin's Creed Odyssey",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "817130": {
+        "name": "WWE 2K19",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "870780": {
+        "name": "Control",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "911400": {
+        "name": "Assassin's Creed III Remastered",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "916440": {
+        "name": "Anno 1800",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "934700": {
+        "name": "Dead Island 2",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "976310": {
+        "name": "Mortal Kombat 11",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "990080": {
+        "name": "Hogwarts Legacy",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1030300": {
+        "name": "Hollow Knight: Silksong",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1030830": {
+        "name": "Mafia II: Definitive Edition",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1030840": {
+        "name": "Mafia: Definitive Edition",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1086940": {
+        "name": "Baldur's Gate 3",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1091500": {
+        "name": "Cyberpunk 2077",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1142710": {
+        "name": "Total War: WARHAMMER III",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1167630": {
+        "name": "Teardown",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1174180": {
+        "name": "Red Dead Redemption 2",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1237320": {
+        "name": "Sonic Frontiers",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1237950": {
+        "name": "STAR WARS\u2122 Battlefront\u2122 II",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1245620": {
+        "name": "Elden Ring",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1255630": {
+        "name": "WWE 2K22",
+        "playable": 1,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1262580": {
+        "name": "Need for Speed Payback",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1262600": {
+        "name": "Need for Speed Rivals",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1273400": {
+        "name": "Construction Simulator",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1304930": {
+        "name": "The Outlast Trials",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1326470": {
+        "name": "Sons of the Forest",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1364780": {
+        "name": "Street Fighter 6",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1451190": {
+        "name": "Undisputed",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1490890": {
+        "name": "Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1551360": {
+        "name": "Forza Horizon 5",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1623730": {
+        "name": "Palworld",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1693980": {
+        "name": "Dead Space\u2122",
+        "playable": 1,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1761390": {
+        "name": "Hatsune Miku: Project DIVA Mega Mix+",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1774580": {
+        "name": "Star Wars Jedi: Survivor",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1785650": {
+        "name": "TopSpin 2K25",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1808500": {
+        "name": "ARC Raiders",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1844380": {
+        "name": "Warhammer Age of Sigmar: Realms of Ruin",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1846380": {
+        "name": "Need For Speed: Unbound",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1903340": {
+        "name": "Clair Obscur: Expedition 33",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1938090": {
+        "name": "Call of Duty\u00ae: Black Ops 7",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1941540": {
+        "name": "Mafia: The Old Country",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "1942660": {
+        "name": "WWE 2K23",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "1966720": {
+        "name": "Lethal Company",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "1971870": {
+        "name": "Mortal Kombat 1",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2050650": {
+        "name": "Resident Evil 4",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2055290": {
+        "name": "Sonic Colors Ultimate",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2208920": {
+        "name": "Assassin's Creed Valhalla",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2246340": {
+        "name": "Monster Hunter Wilds",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2315690": {
+        "name": "WWE 2K24",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "2344520": {
+        "name": "Diablo IV",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "2358720": {
+        "name": "Black Myth: Wukong",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2369390": {
+        "name": "Far Cry 6",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": true
+    },
+    "2486820": {
+        "name": "Sonic Racing: CrossWorlds",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2495100": {
+        "name": "Hello Kitty Island Adventure",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2582560": {
+        "name": "Madden NFL 25",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2591280": {
+        "name": "F1\u00ae Manager 2024",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2622380": {
+        "name": "Elden Ring Nightreign",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "2694490": {
+        "name": "Path of Exile 2",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "2807960": {
+        "name": "Battlefield 6",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "2840770": {
+        "name": "Avatar: Frontiers of Pandora",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2842040": {
+        "name": "Star Wars Outlaws",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "2878960": {
+        "name": "WWE 2K25",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "2928600": {
+        "name": "Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3008130": {
+        "name": "Dying light: The Beast",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": true
+    },
+    "3017860": {
+        "name": "DOOM: The Dark Ages",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3035570": {
+        "name": "Assassin's Creed Mirage",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3059520": {
+        "name": "F1\u00ae 25",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3070070": {
+        "name": "TCG Cards Shop Simulator",
+        "playable": 1,
+        "denuvo": false,
+        "of-available": false
+    },
+    "3159330": {
+        "name": "Assassin's Creed Shadows",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3230400": {
+        "name": "Madden NFL 26",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3240220": {
+        "name": "Grand Theft Auto V Enhanced",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": false
+    },
+    "3405690": {
+        "name": "EA Sports FC 26",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": true
+    },
+    "3489700": {
+        "name": "Stellar Blade\u2122",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3527290": {
+        "name": "PEAK",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": true
+    },
+    "3551340": {
+        "name": "Football Manager 26",
+        "playable": 2,
+        "denuvo": true,
+        "of-available": false
+    },
+    "3932890": {
+        "name": "Escape from Tarkov",
+        "playable": 0,
+        "denuvo": false,
+        "of-available": false
+    },
+    "3949040": {
+        "name": "Rv There Yet?",
+        "playable": 2,
+        "denuvo": false,
+        "of-available": true
+    }
+}
