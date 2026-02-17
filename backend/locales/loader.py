@@ -105,13 +105,9 @@ class LocaleManager:
             self._english_strings = strings.copy()
             self._locales = {}
 
-            try:
-                available_files = [
-                    f for f in os.listdir(LOCALES_DIR) if f.endswith(".json")
-                ]
-            except OSError as exc:
-                logger.warn(f"LuaTools: Failed to list locales dir: {exc}")
-                available_files = []
+            available_files = [
+                f for f in os.listdir(LOCALES_DIR) if f.endswith(".json")
+            ]
 
             for filename in available_files:
                 locale_code = filename[:-5]

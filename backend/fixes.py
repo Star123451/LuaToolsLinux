@@ -625,9 +625,10 @@ def get_installed_fixes() -> str:
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to get installed fixes: {exc}")
         return json.dumps({"success": False, "error": str(exc)})
+
 def apply_linux_native_fix(install_path: str) -> str:
     """Recursively applies execution permissions to all files in the game folder (Linux Only)."""
-    import stat  # Import needed for permissions
+    import stat
 
     if os.name != 'posix':
         return json.dumps({"success": False, "error": "This fix is for Linux only."})
@@ -637,20 +638,16 @@ def apply_linux_native_fix(install_path: str) -> str:
 
     try:
         count = 0
-        # Permissions rwxr-xr-x (755) - Owner reads/writes/executes, others read/execute
-        EXEC_MASK = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
 
         for root, dirs, files in os.walk(install_path):
             for name in files:
                 file_path = os.path.join(root, name)
                 try:
-                    # Get current stats
                     st = os.stat(file_path)
-                    # Add execution bit
                     os.chmod(file_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
                     count += 1
                 except Exception:
-                    pass # Skip files we can't modify
+                    pass  # Skip files we can't modify
 
         logger.log(f"LuaTools: Native Fix applied to {count} files in {install_path}")
         return json.dumps({"success": True, "count": count})
@@ -659,14 +656,16 @@ def apply_linux_native_fix(install_path: str) -> str:
         logger.error(f"LuaTools: Native Fix Error: {e}")
         return json.dumps({"success": False, "error": str(e)})
 
+
 __all__ = [
     "apply_game_fix",
+    "apply_linux_native_fix",
     "cancel_apply_fix",
     "check_for_fixes",
     "get_apply_fix_status",
     "get_installed_fixes",
     "get_unfix_status",
     "unfix_game",
-    "apply_linux_native_fix",
 ]
+
 

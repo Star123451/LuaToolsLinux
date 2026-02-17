@@ -1,26 +1,18 @@
-"""Steam-related utilities used across LuaTools backend modules."""
+"""Steam-related utilities used across LuaTools backend modules (Linux)."""
 
 from __future__ import annotations
 
 import os
 import re
 import subprocess
-import sys
 from typing import Dict, Optional
 
 import Millennium  # type: ignore
 
 from logger import logger
+from linux_platform import find_steam_root, get_stplugin_dir, open_directory
 
 _STEAM_INSTALL_PATH: Optional[str] = None
-
-if sys.platform.startswith("win"):
-    try:
-        import winreg  # type: ignore
-    except Exception:  # pragma: no cover - registry import failure fallback
-        winreg = None  # type: ignore
-else:
-    winreg = None  # type: ignore
 
 
 def detect_steam_install_path() -> str:
@@ -29,15 +21,10 @@ def detect_steam_install_path() -> str:
     if _STEAM_INSTALL_PATH:
         return _STEAM_INSTALL_PATH
 
-    path = None
+    # Try linux_platform first (well-known paths)
+    path = find_steam_root()
 
-    if sys.platform.startswith("win") and winreg is not None:
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
-                path, _ = winreg.QueryValueEx(key, "SteamPath")
-        except Exception:
-            path = None
-
+    # Fallback to Millennium API
     if not path:
         try:
             path = Millennium.steam_path()
@@ -88,34 +75,15 @@ def _parse_vdf_simple(content: str) -> Dict[str, any]:
 
 
 def _find_steam_path() -> str:
+    """Internal helper — returns the cached or freshly discovered Steam path."""
     global _STEAM_INSTALL_PATH
     if _STEAM_INSTALL_PATH:
         return _STEAM_INSTALL_PATH
 
-    if sys.platform.startswith("win") and winreg:
-        try:
-            try:
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam")
-                steam_path = winreg.QueryValueEx(key, "SteamPath")[0]
-                winreg.CloseKey(key)
-                if steam_path and os.path.exists(steam_path):
-                    _STEAM_INSTALL_PATH = steam_path
-                    return steam_path
-            except Exception:
-                pass
-
-            try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Valve\Steam")
-                steam_path = winreg.QueryValueEx(key, "InstallPath")[0]
-                winreg.CloseKey(key)
-                if steam_path and os.path.exists(steam_path):
-                    _STEAM_INSTALL_PATH = steam_path
-                    return steam_path
-            except Exception:
-                pass
-        except Exception as exc:
-            logger.warn(f"LuaTools: Failed to read Steam path from registry: {exc}")
-
+    path = find_steam_root()
+    if path:
+        _STEAM_INSTALL_PATH = path
+        return path
     return ""
 
 
@@ -167,7 +135,6 @@ def get_game_install_path_response(appid: int) -> Dict[str, any]:
         if isinstance(folder_data, dict):
             folder_path = folder_data.get("path", "")
             if folder_path:
-                folder_path = folder_path.replace("\\\\", "\\")
                 all_library_paths.append(folder_path)
 
             apps = folder_data.get("apps", {})
@@ -224,17 +191,11 @@ def get_game_install_path_response(appid: int) -> Dict[str, any]:
 
 
 def open_game_folder(path: str) -> bool:
-    """Open the game folder using the platform default file explorer."""
+    """Open the game folder using xdg-open."""
     try:
         if not path or not os.path.exists(path):
             return False
-
-        if sys.platform.startswith("win"):
-            subprocess.Popen(["explorer", os.path.normpath(path)])
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", path])
-        else:
-            subprocess.Popen(["xdg-open", path])
+        open_directory(path)
         return True
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to open game folder: {exc}")
@@ -247,4 +208,3 @@ __all__ = [
     "has_lua_for_app",
     "open_game_folder",
 ]
-

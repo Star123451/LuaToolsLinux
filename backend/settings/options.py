@@ -48,6 +48,29 @@ SETTINGS_GROUPS: List[SettingGroup] = [
             ),
         ],
     ),
+    SettingGroup(
+        key="slssteam",
+        label="SLSsteam",
+        description="Options for SLSsteam integration.",
+        options=[
+            SettingOption(
+                key="playNotOwnedGames",
+                label="Play Not-Owned Games",
+                option_type="toggle",
+                description="Allow launching games you don't own via SLSsteam.",
+                default=True,
+                metadata={"yesLabel": "Yes", "noLabel": "No"},
+            ),
+            SettingOption(
+                key="safeMode",
+                label="Safe Mode",
+                option_type="toggle",
+                description="Enable SLSsteam safe mode (limits patching).",
+                default=False,
+                metadata={"yesLabel": "On", "noLabel": "Off"},
+            ),
+        ],
+    ),
 ]
 
 

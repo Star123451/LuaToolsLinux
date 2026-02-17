@@ -6,12 +6,10 @@ import base64
 import json
 import os
 import re
+import subprocess
 import threading
 import time
-import subprocess
-import shutil
-import glob
-from typing import Dict, Any
+from typing import Any, Dict
 
 import Millennium  # type: ignore
 
@@ -30,7 +28,7 @@ from paths import backend_path, public_path
 from steam_utils import detect_steam_install_path, has_lua_for_app
 from utils import count_apis, ensure_temp_download_dir, normalize_manifest_text, read_text, write_text
 
-DOWNLOAD_STATE: Dict[int, Dict[str, Any]] = {}
+DOWNLOAD_STATE: Dict[int, Dict[str, any]] = {}
 DOWNLOAD_LOCK = threading.Lock()
 
 # Cache for app names to avoid repeated API calls
@@ -59,55 +57,61 @@ GAMES_DB_LOADED = False
 GAMES_DB_LOCK = threading.Lock()
 
 
+# ==========================================
+#  RYUU COOKIE & MORRENUS KEY MANAGEMENT
+# ==========================================
+
 def _get_cookie_path() -> str:
-    """Retorna o caminho do arquivo de texto onde o cookie do Ryuu fica salvo."""
+    """Return path to the Ryuu cookie file."""
     return os.path.join(os.path.dirname(__file__), "data", "ryuu_cookie.txt")
 
+
 def _get_api_json_path() -> str:
-    """Retorna o caminho do arquivo api.json."""
+    """Return path to api.json."""
     return os.path.join(os.path.dirname(__file__), "api.json")
 
+
 def load_ryu_cookie() -> str:
-    """Lê o cookie do arquivo. Se não existir, retorna vazio."""
+    """Read the Ryuu cookie from file. Returns empty string if not found."""
     try:
         path = _get_cookie_path()
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
                 return f.read().strip()
     except Exception as e:
-        logger.warn(f"LuaTools: Erro ao ler cookie do arquivo: {e}")
+        logger.warn(f"LuaTools: Error reading Ryuu cookie: {e}")
     return ""
 
+
 def save_ryu_cookie(cookie_content: str) -> str:
-    """Salva o cookie enviado pelo Frontend no arquivo ryuu_cookie.txt."""
+    """Save the Ryuu cookie from the frontend to ryuu_cookie.txt."""
     try:
         path = _get_cookie_path()
-        # Garante que a pasta data existe
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         clean_cookie = cookie_content.strip()
-
-        # Garante que o cookie comece com 'session=' se o usuário colar só o hash
+        # Ensure cookie starts with 'session=' if user only pasted the hash
         if clean_cookie and not clean_cookie.startswith("session="):
             clean_cookie = f"session={clean_cookie}"
 
         with open(path, "w", encoding="utf-8") as f:
             f.write(clean_cookie)
 
-        logger.log(f"LuaTools: Cookie do Ryuu salvo com sucesso (Tamanho: {len(clean_cookie)})")
-        return json.dumps({"success": True, "message": "Cookie salvo e formatado com sucesso!"})
+        logger.log(f"LuaTools: Ryuu cookie saved (length: {len(clean_cookie)})")
+        return json.dumps({"success": True, "message": "Cookie saved successfully!"})
     except Exception as e:
-        logger.error(f"LuaTools: Erro ao salvar cookie: {e}")
+        logger.error(f"LuaTools: Error saving Ryuu cookie: {e}")
         return json.dumps({"success": False, "error": str(e)})
 
+
 def update_morrenus_key(key_content: str) -> str:
-    """Atualiza especificamente a chave da API Morrenus no api.json."""
+    """Update the Morrenus API key in api.json."""
     try:
         path = _get_api_json_path()
         key_content = key_content.strip()
 
         if not key_content:
-            return json.dumps({"success": False, "error": "A chave não pode estar vazia."})
+            return json.dumps({"success": False, "error": "Key cannot be empty."})
 
         root_data = {"api_list": []}
 
@@ -126,19 +130,16 @@ def update_morrenus_key(key_content: str) -> str:
         api_list = root_data["api_list"]
         found = False
 
-        # Template da URL do Morrenus
         new_url = f"https://manifest.morrenus.xyz/api/v1/manifest/<appid>?api_key={key_content}"
 
         for api in api_list:
-            # Identifica a API do Morrenus pelo nome ou URL antiga
             if "morrenus" in api.get("name", "").lower() or "morrenus.xyz" in api.get("url", ""):
                 api["url"] = new_url
-                api["enabled"] = True # Garante que ative se estiver desativada
+                api["enabled"] = True
                 found = True
                 break
 
         if not found:
-            # Se não existir, cria
             new_entry = {
                 "name": "Morrenus (Official ACCELA)",
                 "url": new_url,
@@ -146,18 +147,83 @@ def update_morrenus_key(key_content: str) -> str:
                 "unavailable_code": 404,
                 "enabled": True
             }
-            api_list.insert(0, new_entry) # Adiciona no topo
+            api_list.insert(0, new_entry)
 
         root_data["api_list"] = api_list
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(root_data, f, indent=4)
 
-        return json.dumps({"success": True, "message": "Chave do Morrenus atualizada com sucesso!"})
+        return json.dumps({"success": True, "message": "Morrenus key updated successfully!"})
 
     except Exception as e:
-        logger.error(f"LuaTools: Erro ao atualizar Morrenus: {e}")
+        logger.error(f"LuaTools: Error updating Morrenus key: {e}")
         return json.dumps({"success": False, "error": str(e)})
+
+
+# ==========================================
+#  LAUNCHER PATH CONFIG
+# ==========================================
+
+def _get_launcher_path_file() -> str:
+    """Return the path to the launcher path config file."""
+    return os.path.join(os.path.dirname(__file__), "data", "launcher_path.txt")
+
+
+def load_launcher_path() -> str:
+    """Read the saved launcher path. Returns Bifrost default if not set."""
+    default_path = os.path.expanduser("~/.local/share/Bifrost/bin/Bifrost")
+    try:
+        path_file = _get_launcher_path_file()
+        if os.path.exists(path_file):
+            with open(path_file, "r", encoding="utf-8") as f:
+                saved_path = f.read().strip()
+                if saved_path:
+                    return saved_path
+    except Exception as e:
+        logger.warn(f"LuaTools: Error reading launcher path: {e}")
+    return default_path
+
+
+def save_launcher_path_config(path: str) -> str:
+    """Save the user-chosen launcher path."""
+    try:
+        path_file = _get_launcher_path_file()
+        os.makedirs(os.path.dirname(path_file), exist_ok=True)
+
+        clean_path = path.strip()
+        with open(path_file, "w", encoding="utf-8") as f:
+            f.write(clean_path)
+
+        logger.log(f"LuaTools: Launcher path saved: {clean_path}")
+        return json.dumps({"success": True, "path": clean_path})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def browse_for_launcher() -> str:
+    """Open a native Linux file picker (Zenity) to choose the launcher executable."""
+    try:
+        cmd = [
+            'zenity',
+            '--file-selection',
+            '--title=Select Launcher Executable (e.g. Bifrost)',
+            '--filename=' + os.path.expanduser("~/.local/share/")
+        ]
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+
+        if process.returncode == 0:
+            selected_path = stdout.decode('utf-8').strip()
+            return json.dumps({"success": True, "path": selected_path})
+        else:
+            return json.dumps({"success": False, "error": "No file selected or user cancelled"})
+
+    except Exception as e:
+        logger.error(f"LuaTools: File picker error: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
 
 
 def _set_download_state(appid: int, update: dict) -> None:
@@ -181,7 +247,13 @@ def _appid_log_path() -> str:
 
 
 def _fetch_app_name(appid: int) -> str:
-    """Fetch app name with rate limiting and caching."""
+    """Fetch app name with rate limiting and caching.
+    
+    Fallback order:
+    1. In-memory cache
+    2. Applist file (in-memory) - checked before web requests
+    3. Steam API (web request as final resort)
+    """
     global LAST_API_CALL_TIME
 
     # Check cache first
@@ -194,11 +266,13 @@ def _fetch_app_name(appid: int) -> str:
     # Check applist file before making web requests
     applist_name = _get_app_name_from_applist(appid)
     if applist_name:
+        # Cache the result from applist
         with APP_NAME_CACHE_LOCK:
             APP_NAME_CACHE[appid] = applist_name
         return applist_name
 
     # Steam API as final resort (web request)
+    # Rate limiting: wait if needed
     with APP_NAME_CACHE_LOCK:
         time_since_last_call = time.time() - LAST_API_CALL_TIME
         if time_since_last_call < API_CALL_MIN_INTERVAL:
@@ -217,12 +291,14 @@ def _fetch_app_name(appid: int) -> str:
             name = inner.get("name")
             if isinstance(name, str) and name.strip():
                 name = name.strip()
+                # Cache the result
                 with APP_NAME_CACHE_LOCK:
                     APP_NAME_CACHE[appid] = name
                 return name
     except Exception as exc:
         logger.warn(f"LuaTools: _fetch_app_name failed for {appid}: {exc}")
 
+    # Cache empty result to avoid repeated failed attempts
     with APP_NAME_CACHE_LOCK:
         APP_NAME_CACHE[appid] = ""
     return ""
@@ -271,21 +347,35 @@ def _log_appid_event(action: str, appid: int, name: str) -> None:
 
 
 def _preload_app_names_cache() -> None:
+    """Pre-load all app names from loaded_apps, appidlogs, and applist files into memory cache."""
+    # First, load from appidlogs.txt (historical records)
     try:
         log_path = _appid_log_path()
         if os.path.exists(log_path):
             with open(log_path, "r", encoding="utf-8") as handle:
                 for line in handle.read().splitlines():
+                    # Format: [ACTION - API_NAME] appid - name - timestamp
+                    # Example: [ADDED - Sadie] 945360 - Among Us - 2024-01-15 14:05:04
+                    # Or: [REMOVED] appid - name - timestamp
                     if "]" in line and " - " in line:
                         try:
+                            # Extract content after the first ']'
                             parts = line.split("]", 1)
-                            if len(parts) < 2: continue
+                            if len(parts) < 2:
+                                continue
+
                             content = parts[1].strip()
+                            # Split by " - " to get: appid, name, timestamp (max 3 parts)
                             content_parts = content.split(" - ", 2)
+
                             if len(content_parts) >= 2:
                                 appid_str = content_parts[0].strip()
                                 name = content_parts[1].strip()
+
+                                # Try to parse appid
                                 appid = int(appid_str)
+
+                                # Skip "Unknown Game" or "UNKNOWN" entries
                                 if name and not name.startswith("Unknown") and not name.startswith("UNKNOWN"):
                                     with APP_NAME_CACHE_LOCK:
                                         APP_NAME_CACHE[appid] = name
@@ -294,6 +384,7 @@ def _preload_app_names_cache() -> None:
     except Exception as exc:
         logger.warn(f"LuaTools: _preload_app_names_cache from logs failed: {exc}")
 
+    # Then, load from loaded_apps.txt (current state - overrides log if present)
     try:
         path = _loaded_apps_path()
         if os.path.exists(path):
@@ -311,7 +402,9 @@ def _preload_app_names_cache() -> None:
                             continue
     except Exception as exc:
         logger.warn(f"LuaTools: _preload_app_names_cache from loaded_apps failed: {exc}")
-
+    
+    # Finally, load from applist file (as fallback source - doesn't override existing cache)
+    # This ensures applist is available for lookups without web requests
     try:
         _load_applist_into_memory()
     except Exception as exc:
@@ -319,6 +412,7 @@ def _preload_app_names_cache() -> None:
 
 
 def _get_loaded_app_name(appid: int) -> str:
+    """Get app name from loadedappids.txt, with applist as fallback."""
     try:
         path = _loaded_apps_path()
         if os.path.exists(path):
@@ -330,27 +424,36 @@ def _get_loaded_app_name(appid: int) -> str:
                             return name
     except Exception:
         pass
+    
+    # Fallback to applist if not found in loadedappids.txt
     return _get_app_name_from_applist(appid)
 
 
 def _applist_file_path() -> str:
+    """Get the path to the applist JSON file."""
     temp_dir = ensure_temp_download_dir()
     return os.path.join(temp_dir, APPLIST_FILE_NAME)
 
 
 def _load_applist_into_memory() -> None:
+    """Load the applist JSON file into memory for fast lookups."""
     global APPLIST_DATA, APPLIST_LOADED
+    
     with APPLIST_LOCK:
-        if APPLIST_LOADED: return
+        if APPLIST_LOADED:
+            return
+        
         file_path = _applist_file_path()
         if not os.path.exists(file_path):
             logger.log("LuaTools: Applist file not found, skipping load")
-            APPLIST_LOADED = True
+            APPLIST_LOADED = True  # Mark as loaded to avoid repeated checks
             return
+        
         try:
             logger.log("LuaTools: Loading applist into memory...")
             with open(file_path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
+            
             if isinstance(data, list):
                 count = 0
                 for entry in data:
@@ -363,50 +466,70 @@ def _load_applist_into_memory() -> None:
                 logger.log(f"LuaTools: Loaded {count} app names from applist into memory")
             else:
                 logger.warn("LuaTools: Applist file has invalid format (expected array)")
+            
             APPLIST_LOADED = True
         except Exception as exc:
             logger.warn(f"LuaTools: Failed to load applist into memory: {exc}")
-            APPLIST_LOADED = True
+            APPLIST_LOADED = True  # Mark as loaded to avoid repeated failed attempts
 
 
 def _get_app_name_from_applist(appid: int) -> str:
+    """Get app name from in-memory applist."""
     global APPLIST_DATA, APPLIST_LOADED
-    if not APPLIST_LOADED: _load_applist_into_memory()
+    
+    # Ensure applist is loaded
+    if not APPLIST_LOADED:
+        _load_applist_into_memory()
+    
     with APPLIST_LOCK:
         return APPLIST_DATA.get(int(appid), "")
 
 
 def _ensure_applist_file() -> None:
+    """Download the applist file if it doesn't exist."""
     file_path = _applist_file_path()
+    
     if os.path.exists(file_path):
         logger.log("LuaTools: Applist file already exists, skipping download")
         return
+    
     logger.log("LuaTools: Applist file not found, downloading...")
     client = ensure_http_client("LuaTools: DownloadApplist")
+    
     try:
         resp = client.get(APPLIST_URL, follow_redirects=True, timeout=APPLIST_DOWNLOAD_TIMEOUT)
         resp.raise_for_status()
+        
+        # Validate JSON format before saving
         try:
             data = resp.json()
             if not isinstance(data, list):
-                logger.warn("LuaTools: Downloaded applist has invalid format")
+                logger.warn("LuaTools: Downloaded applist has invalid format (expected array)")
                 return
         except json.JSONDecodeError as exc:
             logger.warn(f"LuaTools: Downloaded applist is not valid JSON: {exc}")
             return
+        
+        # Save to file
         with open(file_path, "w", encoding="utf-8") as handle:
             json.dump(data, handle)
+        
         logger.log(f"LuaTools: Successfully downloaded and saved applist file ({len(data)} entries)")
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to download applist file: {exc}")
 
 
 def init_applist() -> None:
+    """Initialize the applist system: download if needed, then load into memory."""
     try:
         _ensure_applist_file()
         _load_applist_into_memory()
     except Exception as exc:
         logger.warn(f"LuaTools: Applist initialization failed: {exc}")
+
+
+def fetch_app_name(appid: int) -> str:
+    return _fetch_app_name(appid)
 
 
 # --- START GAMES DB LOGIC ---
@@ -447,10 +570,6 @@ def _ensure_games_db_file() -> None:
     """Download the games database file."""
     file_path = _games_db_file_path()
 
-    if os.path.exists(file_path):
-        logger.log("LuaTools: Games DB file already exists, skipping download")
-        return
-
     logger.log("LuaTools: Downloading Games DB...")
     client = ensure_http_client("LuaTools: DownloadGamesDB")
 
@@ -465,7 +584,7 @@ def _ensure_games_db_file() -> None:
         with open(file_path, "w", encoding="utf-8") as handle:
             json.dump(data, handle)
 
-        logger.log(f"LuaTools: Successfully downloaded Games DB")
+        logger.log("LuaTools: Successfully downloaded Games DB")
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to download Games DB: {exc}")
 
@@ -490,12 +609,8 @@ def get_games_database() -> str:
 # --- END GAMES DB LOGIC ---
 
 
-def fetch_app_name(appid: int) -> str:
-    return _fetch_app_name(appid)
-
-
 def _process_and_install_lua(appid: int, zip_path: str) -> None:
-    """Process downloaded zip via BIFROST and install lua file into stplug-in directory."""
+    """Process downloaded zip via launcher and install lua file into stplug-in directory."""
     import zipfile
 
     if _is_download_cancelled(appid):
@@ -505,47 +620,49 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
     target_dir = os.path.join(base_path or "", "config", "stplug-in")
     os.makedirs(target_dir, exist_ok=True)
 
-    # --- INTEGRAÇÃO LAUNCHER CUSTOMIZÁVEL ---
-    launcher_bin = _resolve_launcher_path()
+    # --- Launch via configurable launcher (Bifrost by default) ---
+    launcher_bin = load_launcher_path()
+    logger.log(f"LuaTools: Using launcher at: {launcher_bin}")
 
-    if launcher_bin:
-        logger.log(f"LuaTools: Using launcher at: {launcher_bin}")
-        logger.log(f"LuaTools: Enviando {zip_path} para o Launcher...")
+    if os.path.exists(launcher_bin):
+        logger.log(f"LuaTools: Sending {zip_path} to launcher...")
         try:
-            # Garante permissão de execução
+            # Ensure execute permission
             if not os.access(launcher_bin, os.X_OK):
-                 os.chmod(launcher_bin, 0o755)
+                os.chmod(launcher_bin, 0o755)
 
-            # --- CORREÇÃO: Limpar ambiente para evitar conflito Qt6/Steam ---
+            # Clean environment to avoid Qt6/Steam library conflicts
             clean_env = os.environ.copy()
-            clean_env.pop("LD_LIBRARY_PATH", None) # Remove libs da Steam (corrige erro do Qt6)
-            clean_env.pop("LD_PRELOAD", None)      # Remove overlay do Millennium (corrige spam ld.so)
-            clean_env.pop("STEAM_RUNTIME", None)   # Garante que use libs do sistema
-            # -------------------------------------------------------------
+            clean_env.pop("LD_LIBRARY_PATH", None)  # Remove Steam's libs (fixes Qt6 symbol error)
+            clean_env.pop("LD_PRELOAD", None)        # Remove Millennium overlay (fixes ld.so spam)
+            clean_env.pop("STEAM_RUNTIME", None)     # Ensure system libs are used
 
-            proc = subprocess.Popen([launcher_bin, zip_path],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    text=True,
-                                    env=clean_env) # <--- APLICA O AMBIENTE LIMPO
+            proc = subprocess.Popen(
+                [launcher_bin, zip_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=clean_env,
+            )
 
             stdout, stderr = proc.communicate()
 
-            if stdout: logger.log(f"Launcher Output: {stdout[:200]}...")
-            if stderr: logger.warn(f"Launcher Stderr: {stderr}")
+            if stdout:
+                logger.log(f"Launcher Output: {stdout[:200]}...")
+            if stderr:
+                logger.warn(f"Launcher Stderr: {stderr}")
 
             if proc.returncode != 0:
-                logger.warn(f"Launcher terminou com código de erro: {proc.returncode}")
+                logger.warn(f"Launcher exited with error code: {proc.returncode}")
             else:
-                logger.log("Launcher finalizado com sucesso.")
+                logger.log("Launcher finished successfully.")
 
         except Exception as e:
-            logger.error(f"LuaTools: Falha ao executar Launcher: {e}")
+            logger.error(f"LuaTools: Failed to run launcher: {e}")
     else:
-        logger.warn("LuaTools: Launcher not found. Set the path in Settings > External Launcher.")
-    # --------------------------
+        logger.warn(f"LuaTools: Launcher not found at {launcher_bin}")
 
-    # Extração do arquivo .lua (Mantida como garantia e para registro)
+    # Extract manifests and lua files from zip
     with zipfile.ZipFile(zip_path, "r") as archive:
         names = archive.namelist()
 
@@ -657,18 +774,15 @@ def _download_zip_for_app(appid: int):
             appid, {"status": "checking", "currentApi": name, "bytesRead": 0, "totalBytes": 0}
         )
         logger.log(f"LuaTools: Trying API '{name}' -> {url}")
-
         try:
             headers = {"User-Agent": USER_AGENT}
 
-            # --- LÓGICA DO FORCED RYU (COOKIE) ---
+            # --- RYUU COOKIE INJECTION ---
             if "ryuu.lol" in url:
                 cookie_content = load_ryu_cookie()
                 if cookie_content:
-                    logger.log(f"LuaTools: Injetando cookie do Ryuu para a API '{name}'")
-                    # O arquivo já contém 'session=...', então usamos direto
+                    logger.log(f"LuaTools: Injecting Ryuu cookie for API '{name}'")
                     headers["Cookie"] = cookie_content
-                    # Headers adicionais para simular navegador e evitar bloqueio
                     headers["Referer"] = "https://generator.ryuu.lol/"
                     headers["Authority"] = "generator.ryuu.lol"
                     headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
@@ -677,13 +791,12 @@ def _download_zip_for_app(appid: int):
                     headers["Sec-Fetch-Mode"] = "navigate"
                     headers["Sec-Fetch-Site"] = "same-origin"
                 else:
-                    logger.warn("LuaTools: API Ryuu detectada, mas 'data/ryuu_cookie.txt' não encontrado ou vazio!")
-            # -------------------------------------
+                    logger.warn("LuaTools: Ryuu API detected but 'data/ryuu_cookie.txt' not found or empty!")
+            # -----------------------------
 
             if _is_download_cancelled(appid):
                 logger.log(f"LuaTools: Download cancelled before contacting API '{name}'")
                 return
-
             with client.stream("GET", url, headers=headers, follow_redirects=True, timeout=30) as resp:
                 code = resp.status_code
                 logger.log(f"LuaTools: API '{name}' status={code}")
@@ -691,12 +804,10 @@ def _download_zip_for_app(appid: int):
                     continue
                 if code != success_code:
                     if "ryuu.lol" in url and (code == 403 or code == 401):
-                        logger.warn(f"LuaTools: Acesso negado no Ryuu ({code}). Verifique se o cookie expirou.")
+                        logger.warn(f"LuaTools: Ryuu access denied ({code}). Check if the cookie has expired.")
                     continue
-
                 total = int(resp.headers.get("Content-Length", "0") or "0")
                 _set_download_state(appid, {"status": "downloading", "bytesRead": 0, "totalBytes": total})
-
                 with open(dest_path, "wb") as output:
                     for chunk in resp.iter_bytes():
                         if not chunk:
@@ -729,7 +840,7 @@ def _download_zip_for_app(appid: int):
                                 f"LuaTools: API '{name}' returned non-zip file (magic={magic.hex()}, size={file_size}, preview={content_preview[:50]})"
                             )
                             if "Login required" in content_preview or "Sign in" in content_preview:
-                                logger.error("LuaTools: O site Ryuu pediu login. O cookie é inválido.")
+                                logger.error("LuaTools: Ryuu site requested login. The cookie is invalid.")
                             try:
                                 os.remove(dest_path)
                             except Exception:
@@ -953,9 +1064,13 @@ def get_installed_lua_scripts() -> str:
                             game_name = APP_NAME_CACHE.get(appid, "")
 
                         # Fallback to loaded_apps file if not in cache
-                        # (_get_loaded_app_name also checks applist as fallback)
                         if not game_name:
                             game_name = _get_loaded_app_name(appid)
+
+                        # Fallback to applist if still not found (no web request)
+                        # Note: _get_loaded_app_name already checks applist, but check again here for clarity
+                        if not game_name:
+                            game_name = _get_app_name_from_applist(appid)
 
                         # Only use "Unknown Game" as last resort - don't fetch from API
                         if not game_name:
@@ -1004,167 +1119,6 @@ def get_installed_lua_scripts() -> str:
         return json.dumps({"success": False, "error": str(exc)})
 
 
-def _get_launcher_path_file() -> str:
-    """Retorna o caminho do arquivo de texto onde o caminho do launcher fica salvo."""
-    return os.path.join(os.path.dirname(__file__), "data", "launcher_path.txt")
-
-def load_launcher_path() -> str:
-    """Lê o caminho do launcher salvo. Se não existir, retorna o padrão do Bifrost."""
-    default_path = os.path.expanduser("~/.local/share/Bifrost/bin/Bifrost")
-    try:
-        path_file = _get_launcher_path_file()
-        if os.path.exists(path_file):
-            with open(path_file, "r", encoding="utf-8") as f:
-                saved_path = f.read().strip()
-                if saved_path:
-                    return saved_path
-    except Exception as e:
-        logger.warn(f"LuaTools: Erro ao ler caminho do launcher: {e}")
-    return default_path
-
-
-def _normalize_launcher_candidate(path: str) -> str:
-    if not path:
-        return ""
-    if os.path.isdir(path):
-        for name in ("Accela.AppImage", "accela.AppImage", "Accela", "accela", "Bifrost", "bifrost"):
-            candidate = os.path.join(path, name)
-            if os.path.exists(candidate):
-                return candidate
-        return ""
-    if os.path.exists(path):
-        return path
-    return ""
-
-
-def _resolve_launcher_path() -> str:
-    candidates = []
-
-    saved_path = load_launcher_path()
-    if saved_path:
-        candidates.append(saved_path)
-
-    home = os.path.expanduser("~")
-    candidates.extend(
-        [
-            os.path.join(home, ".local", "share", "Accela", "Accela.AppImage"),
-            os.path.join(home, ".local", "share", "Accela", "Accela"),
-            os.path.join(home, ".local", "share", "Accela", "accela"),
-            os.path.join(home, ".local", "share", "Accela", "bin"),
-            os.path.join(home, ".local", "share", "Accela", "bin", "accela"),
-            os.path.join(home, ".local", "share", "Accela", "bin", "Accela"),
-            os.path.join(home, ".local", "share", "Bifrost", "bin", "Bifrost"),
-            os.path.join(home, ".local", "share", "Bifrost", "bin", "bifrost"),
-            os.path.join(home, ".local", "share", "Bifrost", "bin"),
-            os.path.join(home, ".local", "bin", "accela"),
-            os.path.join(home, ".local", "bin", "bifrost"),
-            os.path.join(home, "bin", "accela"),
-            os.path.join(home, "bin", "bifrost"),
-            os.path.join(home, "Applications", "Accela"),
-            os.path.join(home, "Applications", "accela"),
-            os.path.join(home, "Applications", "Bifrost"),
-            os.path.join(home, "Applications", "bifrost"),
-            os.path.join(home, "accela", "Accela"),
-            os.path.join(home, "accela", "accela"),
-            os.path.join(home, "bifrost", "Bifrost"),
-            os.path.join(home, "bifrost", "bifrost"),
-            "/opt/Accela/Accela",
-            "/opt/Accela/accela",
-            "/opt/Accela/bin/Accela",
-            "/opt/Accela/bin/accela",
-            "/opt/Bifrost/Bifrost",
-            "/opt/Bifrost/bifrost",
-            "/opt/Bifrost/bin/Bifrost",
-            "/opt/Bifrost/bin/bifrost",
-            "/usr/local/share/Accela/Accela",
-            "/usr/local/share/Accela/accela",
-            "/usr/local/share/Bifrost/Bifrost",
-            "/usr/local/share/Bifrost/bifrost",
-            "/usr/local/bin/accela",
-            "/usr/bin/accela",
-            "/usr/local/bin/bifrost",
-            "/usr/bin/bifrost",
-        ]
-    )
-
-    for binary in ("accela", "Accela", "bifrost", "Bifrost"):
-        found = shutil.which(binary)
-        if found:
-            candidates.append(found)
-
-    downloads_dir = os.path.join(home, "Downloads")
-    for pattern in (
-        "Accela*.AppImage",
-        "accela*.AppImage",
-        "ACCELA*.AppImage",
-        "Bifrost*.AppImage",
-        "bifrost*.AppImage",
-    ):
-        for match in glob.glob(os.path.join(downloads_dir, pattern)):
-            candidates.append(match)
-
-    for base in (
-        os.path.join(home, ".local", "share"),
-        os.path.join(home, "Applications"),
-        os.path.join(home, "Games"),
-        os.path.join(home, "opt"),
-        "/opt",
-        "/usr/local/share",
-        "/usr/share",
-    ):
-        for name in ("Accela", "accela", "Bifrost", "bifrost"):
-            candidates.append(os.path.join(base, name))
-            candidates.append(os.path.join(base, name, "bin"))
-            candidates.append(os.path.join(base, name, "bin", name))
-
-    for candidate in candidates:
-        resolved = _normalize_launcher_candidate(candidate)
-        if resolved:
-            return resolved
-
-    return ""
-
-def save_launcher_path_config(path: str) -> str:
-    """Salva o caminho do launcher escolhido pelo usuário."""
-    try:
-        path_file = _get_launcher_path_file()
-        os.makedirs(os.path.dirname(path_file), exist_ok=True)
-
-        clean_path = path.strip()
-        with open(path_file, "w", encoding="utf-8") as f:
-            f.write(clean_path)
-
-        logger.log(f"LuaTools: Caminho do launcher salvo: {clean_path}")
-        return json.dumps({"success": True, "path": clean_path})
-    except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
-
-def browse_for_launcher() -> str:
-    """Abre uma janela nativa do Linux (Zenity) para escolher o arquivo."""
-    try:
-        # Tenta usar o Zenity (padrão no SteamOS/Gnome)
-        cmd = [
-            'zenity',
-            '--file-selection',
-            '--title=Select Launcher Executable (e.g. Bifrost)',
-            '--filename=' + os.path.expanduser("~/.local/share/")
-        ]
-
-        # Executa o comando e pega a saída
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-
-        if process.returncode == 0:
-            selected_path = stdout.decode('utf-8').strip()
-            return json.dumps({"success": True, "path": selected_path})
-        else:
-            return json.dumps({"success": False, "error": "No file selected or user cancelled"})
-
-    except Exception as e:
-        logger.error(f"LuaTools: File picker error: {e}")
-        return json.dumps({"success": False, "error": str(e)})
-
-
 __all__ = [
     "cancel_add_via_luatools",
     "delete_luatools_for_app",
@@ -1185,3 +1139,4 @@ __all__ = [
     "init_games_db",
     "get_games_database",
 ]
+

@@ -7,7 +7,6 @@ import os
 import subprocess
 import threading
 import time
-import sys
 import zipfile
 from typing import Any, Dict, Optional
 
@@ -30,7 +29,6 @@ from utils import (
 )
 
 _UPDATE_CHECK_THREAD: Optional[threading.Thread] = None
-_AUTO_UPDATE_ENABLED = False  # Set to False to disable background checks
 
 
 def apply_pending_update_if_any() -> str:
@@ -254,52 +252,48 @@ def _check_and_donate_keys() -> None:
     try:
         from donate_keys import extract_valid_decryption_keys, send_donation_keys
         from settings.manager import _get_values_locked
-
+        
         values = _get_values_locked()
         general = values.get("general", {})
         donate_keys_enabled = general.get("donateKeys", False)
-
+        
         if not donate_keys_enabled:
             return
-
+        
         steam_path = detect_steam_install_path()
         if not steam_path:
             logger.warn("LuaTools: Cannot donate keys - Steam path not found")
             return
-
+        
         pairs = extract_valid_decryption_keys(steam_path)
         if pairs:
             send_donation_keys(pairs)
         else:
             logger.log("LuaTools: No valid keys found to donate")
-
+            
     except Exception as exc:
         logger.warn(f"LuaTools: Donate keys check failed: {exc}")
 
 
 def _start_initial_check_worker():
     try:
-        if _AUTO_UPDATE_ENABLED:
-            message = check_for_update_once()
-            if message:
-                store_last_message(message)
-                logger.log(
-                    f"AutoUpdate: Initial check found update: {message}. Auto-restarting Steam..."
-                )
-                time.sleep(2)
-                restart_steam_internal()
-            else:
-                _start_periodic_update_checks()
+        message = check_for_update_once()
+        if message:
+            store_last_message(message)
+            logger.log(
+                f"AutoUpdate: Initial check found update: {message}. Auto-restarting Steam..."
+            )
+            time.sleep(2)
+            restart_steam_internal()
         else:
-             logger.log("AutoUpdate: Background updates disabled.")
-
-        # Check and donate keys regardless of update status
+            _start_periodic_update_checks()
+        
+        # Check and donate keys after update check completes
         _check_and_donate_keys()
     except Exception as exc:
         logger.warn(f"AutoUpdate: background check failed: {exc}")
         try:
-             if _AUTO_UPDATE_ENABLED:
-                _start_periodic_update_checks()
+            _start_periodic_update_checks()
         except Exception:
             pass
 
@@ -310,49 +304,74 @@ def start_auto_update_background_check() -> None:
 
 
 def restart_steam_internal() -> bool:
-    """Internal helper used to restart Steam (Windows/Linux support)."""
+    """Internal helper used to restart Steam on Linux with SLSsteam injection."""
+    import shutil
+    import time
+    from linux_platform import find_steam_root, get_slssteam_install_dir, check_slssteam_installed
+
+    # ── 1. Kill running Steam ────────────────────────────────────────
     try:
-        if sys.platform == "win32":
-            # --- WINDOWS LOGIC ---
-            script_path = backend_path("restart_steam.cmd")
-            if not os.path.exists(script_path):
-                logger.error(f"LuaTools: restart script not found: {script_path}")
-                return False
-            CREATE_NO_WINDOW = 0x08000000
-            subprocess.Popen(["cmd", "/C", script_path], creationflags=CREATE_NO_WINDOW)
-            logger.log("LuaTools: Windows restart script launched (hidden)")
-            return True
+        # Use -f to match broadly (process may be "steam", "steam.sh", etc.)
+        subprocess.run(["pkill", "-f", "steam"], timeout=5)
+        logger.log("LuaTools: Sent kill signal to Steam")
+    except Exception as exc:
+        logger.warn(f"LuaTools: pkill failed (may already be dead): {exc}")
+
+    # Poll until Steam is actually gone (max 10 seconds)
+    for _ in range(20):
+        result = subprocess.run(
+            ["pgrep", "-x", "steam"], capture_output=True
+        )
+        if result.returncode != 0:
+            break
+        time.sleep(0.5)
+    else:
+        logger.warn("LuaTools: Steam did not shut down in time, proceeding anyway")
+
+    time.sleep(1)  # brief extra grace period
+
+    # ── 2. Create steam.cfg to prevent self-update on next launch ──
+    steam_root = find_steam_root()
+    if steam_root:
+        steam_cfg = os.path.join(steam_root, "steam.cfg")
+        try:
+            with open(steam_cfg, "w", encoding="utf-8") as f:
+                f.write("BootStrapperInhibitAll=enable\n")
+                f.write("BootStrapperForceSelfUpdate=disable\n")
+            logger.log(f"LuaTools: Created steam.cfg at {steam_cfg}")
+        except Exception as exc:
+            logger.warn(f"LuaTools: Failed to create steam.cfg: {exc}")
+
+    # ── 3. Find Steam executable ──────────────────────────────────
+    # Prefer system `steam` command (respects /usr/local/bin wrappers)
+    steam_exe = shutil.which("steam")
+
+    # Fallback to steam.sh in the Steam directory
+    if not steam_exe and steam_root:
+        steam_sh = os.path.join(steam_root, "steam.sh")
+        if os.path.isfile(steam_sh):
+            steam_exe = steam_sh
+
+    if not steam_exe:
+        logger.error("LuaTools: Could not find Steam executable to restart")
+        return False
+
+    # ── 4. Launch Steam with SLSsteam injection ───────────────────
+    try:
+        if check_slssteam_installed():
+            sls_dir = get_slssteam_install_dir()
+            ld_audit = f"{sls_dir}/library-inject.so:{sls_dir}/SLSsteam.so"
+            # Use nohup + env pattern (matches SLSsteam installer exactly)
+            cmd = f'nohup env LD_AUDIT="{ld_audit}" "{steam_exe}" > /dev/null 2>&1 &'
+            logger.log(f"LuaTools: Launching: {cmd}")
+            os.system(cmd)
         else:
-            # --- LINUX LOGIC (Fire-and-Forget) ---
-            logger.log("LuaTools: Linux detected. Preparing Fire-and-Forget restart...")
+            cmd = f'nohup "{steam_exe}" > /dev/null 2>&1 &'
+            logger.log(f"LuaTools: Launching (no SLSsteam): {cmd}")
+            os.system(cmd)
 
-            # Tenta achar o wrapper do SLSsteam
-            sls_wrapper = os.path.expanduser("~/.local/share/SLSsteam/path/steam")
-            steam_cmd = "steam"
-
-            if os.path.exists(sls_wrapper):
-                steam_cmd = sls_wrapper
-                logger.log(f"LuaTools: Found SLSsteam wrapper at {steam_cmd}")
-            else:
-                logger.log("LuaTools: Wrapper not found, trying default 'steam' command")
-
-            # Comando Fire-and-Forget:
-            # 1. sleep 1: Dá tempo para a função retornar True para o UI
-            # 2. pkill -9: Mata a steam (e este processo)
-            # 3. sleep 10: Garante que a Steam morreu
-            # 4. nohup ... &: Inicia a nova steam desatrelada do terminal morto
-            full_command = f"sleep 1; pkill -9 steam; sleep 10; nohup {steam_cmd} > /dev/null 2>&1 &"
-
-            subprocess.Popen(
-                ["sh", "-c", full_command],
-                start_new_session=True, # Cria nova sessão (setsid)
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-
-            logger.log(f"LuaTools: Restart sequence initiated: {full_command}")
-            return True
-
+        logger.log("LuaTools: Steam restart launched successfully")
+        return True
     except Exception as exc:
         logger.error(f"LuaTools: Failed to restart Steam: {exc}")
         return False
@@ -366,7 +385,6 @@ def restart_steam() -> bool:
 def check_for_updates_now() -> Dict[str, Any]:
     """Expose a synchronous update check for the frontend."""
     try:
-        # Allow manual checks even if auto-update is disabled
         message = check_for_update_once()
         if message:
             store_last_message(message)
@@ -384,3 +402,4 @@ __all__ = [
     "restart_steam_internal",
     "start_auto_update_background_check",
 ]
+
