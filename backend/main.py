@@ -3,69 +3,50 @@ import os
 import shutil
 import sys
 import webbrowser
-    def __init__(self) -> None:
-        self._init_thread: threading.Thread | None = None
-
 import subprocess
 import threading
 import re
-    def _async_initialize(self) -> None:
-        try:
-            logger.log("LuaTools: starting async initialization")
-
-            try:
-                detect_steam_install_path()
-            except Exception as exc:
-                logger.warn(f"LuaTools: steam path detection failed: {exc}")
-
-            ensure_http_client("InitApis")
-            ensure_temp_download_dir()
-
-            try:
-                message = apply_pending_update_if_any()
-                if message:
-                    store_last_message(message)
-            except Exception as exc:
-                logger.warn(f"AutoUpdate: apply pending failed: {exc}")
-
-            try:
-                init_applist()
-            except Exception as exc:
-                logger.warn(f"LuaTools: Applist initialization failed: {exc}")
-
-            # --- INICIALIZACAO DA GAMES DB ---
-            try:
-                init_games_db()
-            except Exception as exc:
-                logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
-            # ---------------------------------
-
-            _copy_webkit_files()
-            _inject_webkit_files()
-
-            try:
-                result = InitApis("boot")
-                logger.log(f"InitApis (boot) return: {result}")
-            except Exception as exc:
-                logger.error(f"InitApis (boot) failed: {exc}")
-
-            try:
-                start_auto_update_background_check()
-            except Exception as exc:
-                logger.warn(f"AutoUpdate: start background check failed: {exc}")
-        except Exception as exc:
-            logger.error(f"LuaTools: async init failed: {exc}")
-
 import platform
 import stat  # <--- Importante para permissões no Linux
 
-        if self._init_thread is None or not self._init_thread.is_alive():
-            self._init_thread = threading.Thread(
-                target=self._async_initialize,
-                name="LuaToolsInit",
-                daemon=True,
-            )
-            self._init_thread.start()
+from typing import Any
+
+import Millennium  # type: ignore
+import PluginUtils  # type: ignore
+
+from api_manifest import (
+    fetch_free_apis_now as api_fetch_free_apis_now,
+    get_init_apis_message as api_get_init_message,
+    init_apis as api_init_apis,
+    store_last_message,
+)
+from auto_update import (
+    apply_pending_update_if_any,
+    check_for_updates_now as auto_check_for_updates_now,
+    restart_steam as auto_restart_steam,
+    start_auto_update_background_check,
+)
+from config import WEBKIT_DIR_NAME, WEB_UI_ICON_FILE, WEB_UI_JS_FILE
+from downloads import (
+    cancel_add_via_luatools,
+    delete_luatools_for_app,
+    dismiss_loaded_apps,
+    get_add_status,
+    get_icon_data_url,
+    get_installed_lua_scripts,
+    has_luatools_for_app,
+    init_applist,
+    read_loaded_apps,
+    start_add_via_luatools,
+    save_ryu_cookie,
+    update_morrenus_key,
+    save_launcher_path_config,
+    load_launcher_path,
+    browse_for_launcher,
+    get_games_database,
+    init_games_db,
+)
+from fixes import (
     apply_game_fix,
     cancel_apply_fix,
     check_for_fixes,
@@ -89,6 +70,12 @@ from settings.manager import (
 from steam_utils import detect_steam_install_path, get_game_install_path_response, open_game_folder
 
 logger = shared_logger
+
+
+def _clean_subprocess_env() -> dict:
+    env = os.environ.copy()
+    env.pop("LD_PRELOAD", None)
+    return env
 
 # ==========================================
 #  CONFIGURAÇÃO DO WORKSHOP TOOL (DepotDownloader)
@@ -384,10 +371,16 @@ def InstallDependencies(contentScriptQuery: str = "") -> str:
 
         if not os.path.exists(venv_dir) or not os.path.exists(venv_python):
             logger.log(f"[LuaTools] Criando venv em: {venv_dir}")
-            subprocess.check_call([sys.executable, "-m", "venv", venv_dir])
+            subprocess.check_call(
+                [sys.executable, "-m", "venv", venv_dir],
+                env=_clean_subprocess_env(),
+            )
 
         logger.log(f"[LuaTools] Instalando dependências...")
-        subprocess.check_call([venv_python, "-m", "pip", "install", "-r", requirements_file])
+        subprocess.check_call(
+            [venv_python, "-m", "pip", "install", "-r", requirements_file],
+            env=_clean_subprocess_env(),
+        )
 
         return json.dumps({"success": True, "message": "Dependências instaladas com sucesso!"})
 
@@ -482,7 +475,8 @@ def _run_depot_downloader_workshop(appid: str, pubfile_id: str, download_dir: st
             text=True,
             encoding='utf-8',
             errors='replace',
-            creationflags=creation_flags
+            creationflags=creationflags,
+            env=_clean_subprocess_env(),
         )
         workshop_state["process"] = process
 
