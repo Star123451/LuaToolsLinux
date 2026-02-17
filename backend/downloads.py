@@ -227,6 +227,65 @@ def browse_for_launcher() -> str:
 
 
 
+def _fix_game_permissions_background(appid: int) -> None:
+    """Background task to fix executable permissions on extracted game files.
+    
+    Waits for ACCELA to finish extracting, then applies execute permissions.
+    """
+    import stat
+    from steam_utils import get_game_install_path_response
+    
+    max_wait_time = 300  # 5 minutes max
+    check_interval = 2   # Check every 2 seconds
+    elapsed = 0
+    
+    while elapsed < max_wait_time:
+        try:
+            game_install_info = get_game_install_path_response(appid)
+            if game_install_info.get("error"):
+                elapsed += check_interval
+                time.sleep(check_interval)
+                continue
+                
+            install_path = game_install_info.get("installPath", "")
+            if not install_path or not os.path.exists(install_path):
+                elapsed += check_interval
+                time.sleep(check_interval)
+                continue
+            
+            # Game directory exists - check if files have been extracted
+            try:
+                files_in_dir = os.listdir(install_path)
+                if len(files_in_dir) > 0:
+                    # Files found - likely ACCELA has finished, now fix permissions
+                    logger.log(f"LuaTools: Fixing permissions for {appid} in {install_path}")
+                    count = 0
+                    for root, dirs, files in os.walk(install_path):
+                        for name in files:
+                            file_path = os.path.join(root, name)
+                            try:
+                                st = os.stat(file_path)
+                                # Add execute permissions for user, group, and others
+                                os.chmod(file_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                                count += 1
+                            except Exception:
+                                pass  # Skip files we can't modify
+                    
+                    logger.log(f"LuaTools: Fixed execute permissions on {count} files for appid={appid}")
+                    return
+            except Exception as e:
+                logger.warn(f"LuaTools: Error during permission fix for {appid}: {e}")
+                return
+        except Exception as e:
+            logger.warn(f"LuaTools: Unexpected error in permission fix background task: {e}")
+            return
+        
+        elapsed += check_interval
+        time.sleep(check_interval)
+    
+    logger.warn(f"LuaTools: Timeout waiting for game files extraction for appid={appid}")
+
+
 def _launch_accela_download(appid: int, zip_path: str) -> bool:
     """Launch ACCELA with the downloaded zip to perform the actual game download.
 
@@ -264,6 +323,15 @@ def _launch_accela_download(appid: int, zip_path: str) -> bool:
             start_new_session=True,  # detach from our process tree
         )
         logger.log(f"LuaTools: ACCELA launched successfully for appid={appid}")
+        
+        # Start background task to fix file permissions after ACCELA finishes extraction
+        perm_fix_thread = threading.Thread(
+            target=_fix_game_permissions_background, 
+            args=(appid,), 
+            daemon=True
+        )
+        perm_fix_thread.start()
+        
         return True
     except Exception as exc:
         logger.warn(f"LuaTools: Failed to launch ACCELA: {exc}")
