@@ -445,6 +445,10 @@ def _ensure_games_db_file() -> None:
     """Download the games database file."""
     file_path = _games_db_file_path()
 
+    if os.path.exists(file_path):
+        logger.log("LuaTools: Games DB file already exists, skipping download")
+        return
+
     logger.log("LuaTools: Downloading Games DB...")
     client = ensure_http_client("LuaTools: DownloadGamesDB")
 
