@@ -33,20 +33,6 @@ This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](htt
 
 ## Installation
 
-**One-liner (Auto-installs everything):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash
-```
-
-The installer will automatically:
-- ✅ Install Millennium if not found
-- ✅ Install SLSsteam if not found (requires build-essential)
-- ✅ Install ACCELA if not found
-- ✅ Clone/update LuaTools plugin
-- ✅ No pip or external Python packages needed
-
-Each component installation is optional - you can skip any you want to install manually.
-
 <details>
 <summary>Manual installation</summary>
 
@@ -55,33 +41,6 @@ Please see this message in the LuaTools discord for manual installation steps:
 https://discord.com/channels/1408201417834893385/1473040386908885122/1473047251319394581
 
 </details>
-
-## Project Structure
-
-```
-luatools/
-├── plugin.json              # Millennium plugin manifest
-├── requirements.txt         # Python dependencies (none - uses stdlib only!)
-├── backend/
-│   ├── main.py              # Plugin entry point + API wrappers
-│   ├── linux_platform.py    # Linux path detection & platform helpers
-│   ├── slssteam_config.py   # SLSsteam config.yaml reader/writer
-│   ├── steam_utils.py       # Steam path detection, VDF parsing
-│   ├── downloads.py         # Download engine, Games DB, Ryuu/Morrenus
-│   ├── fixes.py             # Game fixes + Linux native fix
-│   ├── auto_update.py       # Self-update from GitHub releases
-│   ├── donate_keys.py       # Key donation system
-│   ├── config.py            # Constants (API URLs, filenames)
-│   ├── api_manifest.py      # API manifest fetching
-│   ├── http_client.py       # HTTP client management
-│   ├── settings/
-│   │   ├── manager.py       # Settings persistence (JSON)
-│   │   └── options.py       # Settings schema (General + SLSsteam)
-│   └── ...
-└── public/
-    ├── luatools.js          # Frontend UI (injected into Steam)
-    └── luatools-icon.png    # Plugin icon
-```
 
 ## How It Works
 
