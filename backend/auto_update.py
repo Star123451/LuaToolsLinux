@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import threading
@@ -17,7 +16,7 @@ from config import (
     UPDATE_PENDING_INFO,
     UPDATE_PENDING_ZIP,
 )
-from http_client import ensure_http_client, get_http_client
+from http_client import ensure_http_client
 from logger import logger
 from paths import backend_path, get_plugin_dir
 from steam_utils import detect_steam_install_path
@@ -32,6 +31,8 @@ _UPDATE_CHECK_THREAD: Optional[threading.Thread] = None
 
 
 def apply_pending_update_if_any() -> str:
+    return "no"
+
     """Extract a pending update zip if present. Returns a message or empty string."""
     pending_zip = backend_path(UPDATE_PENDING_ZIP)
     pending_info = backend_path(UPDATE_PENDING_INFO)
@@ -63,6 +64,8 @@ def apply_pending_update_if_any() -> str:
 
 
 def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    return {}
+
     owner = str(cfg.get("owner", "")).strip()
     repo = str(cfg.get("repo", "")).strip()
     asset_name = str(cfg.get("asset_name", "ltsteamplugin.zip")).strip()
@@ -141,6 +144,7 @@ def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _download_and_extract_update(zip_url: str, pending_zip: str) -> bool:
+    return False  # do not.
     client = ensure_http_client("AutoUpdate: download")
     try:
         logger.log(f"AutoUpdate: Downloading {zip_url} -> {pending_zip}")
@@ -159,6 +163,9 @@ def _download_and_extract_update(zip_url: str, pending_zip: str) -> bool:
 def check_for_update_once() -> str:
     """Check remote manifest (if configured) and download a newer version.
     Returns a message for the user if an update was downloaded/applied."""
+
+    return ""
+
     client = ensure_http_client("AutoUpdate")
     cfg_path = backend_path(UPDATE_CONFIG_FILE)
     cfg = read_json(cfg_path)
@@ -252,25 +259,25 @@ def _check_and_donate_keys() -> None:
     try:
         from donate_keys import extract_valid_decryption_keys, send_donation_keys
         from settings.manager import _get_values_locked
-        
+
         values = _get_values_locked()
         general = values.get("general", {})
         donate_keys_enabled = general.get("donateKeys", False)
-        
+
         if not donate_keys_enabled:
             return
-        
+
         steam_path = detect_steam_install_path()
         if not steam_path:
             logger.warn("LuaTools: Cannot donate keys - Steam path not found")
             return
-        
+
         pairs = extract_valid_decryption_keys(steam_path)
         if pairs:
             send_donation_keys(pairs)
         else:
             logger.log("LuaTools: No valid keys found to donate")
-            
+
     except Exception as exc:
         logger.warn(f"LuaTools: Donate keys check failed: {exc}")
 
@@ -287,7 +294,7 @@ def _start_initial_check_worker():
             restart_steam_internal()
         else:
             _start_periodic_update_checks()
-        
+
         # Check and donate keys after update check completes
         _check_and_donate_keys()
     except Exception as exc:
@@ -307,7 +314,12 @@ def restart_steam_internal() -> bool:
     """Internal helper used to restart Steam on Linux with SLSsteam injection."""
     import shutil
     import time
-    from linux_platform import find_steam_root, get_slssteam_install_dir, check_slssteam_installed
+
+    from linux_platform import (
+        check_slssteam_installed,
+        find_steam_root,
+        get_slssteam_install_dir,
+    )
 
     # ── 1. Kill running Steam ────────────────────────────────────────
     try:
@@ -319,9 +331,7 @@ def restart_steam_internal() -> bool:
 
     # Poll until Steam is actually gone (max 10 seconds)
     for _ in range(20):
-        result = subprocess.run(
-            ["pgrep", "-x", "steam"], capture_output=True
-        )
+        result = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
         if result.returncode != 0:
             break
         time.sleep(0.5)
@@ -402,4 +412,3 @@ __all__ = [
     "restart_steam_internal",
     "start_auto_update_background_check",
 ]
-
