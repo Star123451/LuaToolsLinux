@@ -3,8 +3,9 @@
   "name": "luatools",
   "common_name": "LuaToolsLinux",
   "description": "LuaTools Steam Plugin! FOR LINUX!!! by StarWarsK and geovanygrdt",
-  "version": "6.4.1",
+  "version": "1.0",
   "include": [
     "public"
   ]
 }
+
