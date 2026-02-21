@@ -1,0 +1,46 @@
+{
+    "api_list": [
+        {
+            "name": "Morrenus",
+            "url": "https://manifest.morrenus.xyz/api/v1/manifest/<appid>?api_key=",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        },
+        {
+            "name": "Ryuu",
+            "url": "http://167.235.229.108/<appid>",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        },
+        {
+            "name": "TwentyTwo Cloud",
+            "url": "https://twentytwocloud.com/secure_download?auth=1771526723_73652ce834428eea993e88dd1ccbe5be_442b8efb5c05f1bf8ea5ca46&appid=<appid>",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        },
+        {
+            "name": "Sushi",
+            "url": "https://raw.githubusercontent.com/sushi-dev55-alt/sushitools-games-repo-alt/refs/heads/main/<appid>.zip",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        },
+        {
+            "name": "Forced Ryu (Cookie)",
+            "url": "https://generator.ryuu.lol/download?appid=<appid>&file_type=manifest",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        },
+        {
+            "name": "Spinoza",
+            "url": "https://github.com/SPIN0ZAi/SB_manifest_DB/archive/refs/heads/<appid>.zip",
+            "success_code": 200,
+            "unavailable_code": 404,
+            "enabled": true
+        }
+    ]
+}
