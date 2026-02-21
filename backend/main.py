@@ -867,95 +867,27 @@ def GetThemes(contentScriptQuery: str = "") -> str:
         return json.dumps({"success": False, "error": str(exc)})
 
 
-def ApplySettingsChanges(
-    contentScriptQuery: str = "", changes: Any = None, **kwargs: Any
-) -> str:  # type: ignore[name-defined]
+def ApplySettingsChanges(contentScriptQuery: str = "", changesJson: str = "") -> str:
     try:
-        if "changes" in kwargs and changes is None:
-            changes = kwargs["changes"]
-        if changes is None and isinstance(kwargs, dict):
-            changes = kwargs
-
-        try:
-            logger.log(
-                "LuaTools: ApplySettingsChanges raw argument "
-                f"type={type(changes)} value={changes!r}"
-            )
-            logger.log(f"LuaTools: ApplySettingsChanges kwargs: {kwargs}")
-        except Exception:
-            pass
-
-        payload: Any = None
-
-        if isinstance(changes, str) and changes:
+        payload: Any = {}
+        if changesJson:
             try:
-                payload = json.loads(changes)
+                payload = json.loads(changesJson)
             except Exception:
-                logger.warn("LuaTools: Failed to parse changes string payload")
+                logger.warn("LuaTools: Failed to parse changesJson")
                 return json.dumps({"success": False, "error": "Invalid JSON payload"})
-            else:
-                # When a full payload dict was sent as JSON, unwrap keys we expect.
-                if isinstance(payload, dict) and "changes" in payload:
-                    kwargs_payload = payload
-                    payload = kwargs_payload.get("changes")
-                    if "contentScriptQuery" in kwargs_payload and not contentScriptQuery:
-                        contentScriptQuery = kwargs_payload.get("contentScriptQuery", "")
-                elif isinstance(payload, dict) and "changesJson" in payload and isinstance(payload["changesJson"], str):
-                    try:
-                        payload = json.loads(payload["changesJson"])
-                    except Exception:
-                        logger.warn("LuaTools: Failed to parse changesJson string inside payload")
-                        return json.dumps({"success": False, "error": "Invalid JSON payload"})
-        elif isinstance(changes, dict) and changes:
-            # When the bridge passes a dict argument directly.
-            if "changesJson" in changes and isinstance(changes["changesJson"], str):
-                try:
-                    payload = json.loads(changes["changesJson"])
-                except Exception:
-                    logger.warn("LuaTools: Failed to parse changesJson payload from dict")
-                    return json.dumps({"success": False, "error": "Invalid JSON payload"})
-            elif "changes" in changes:
-                payload = changes.get("changes")
-            else:
-                payload = changes
-        else:
-            # Look for JSON payload inside kwargs.
-            changes_json = kwargs.get("changesJson")
-            if isinstance(changes_json, dict):
-                payload = changes_json
-            elif isinstance(changes_json, str) and changes_json:
-                try:
-                    payload = json.loads(changes_json)
-                except Exception:
-                    logger.warn("LuaTools: Failed to parse changesJson payload")
-                    return json.dumps({"success": False, "error": "Invalid JSON payload"})
-            elif isinstance(changes_json, dict):
-                payload = changes_json
-            else:
-                payload = changes
 
-        if payload is None:
-            payload = {}
-        elif not isinstance(payload, dict):
-            logger.warn(f"LuaTools: Parsed payload is not a dict: {payload!r}")
+        if not isinstance(payload, dict):
+            logger.warn(f"LuaTools: Payload is not a dict: {payload!r}")
             return json.dumps({"success": False, "error": "Invalid payload format"})
 
         try:
-            logger.log(f"LuaTools: ApplySettingsChanges received payload: {payload}")
+            logger.log(f"LuaTools: ApplySettingsChanges payload: {payload}")
         except Exception:
             pass
 
         result = apply_settings_changes(payload)
-        try:
-            logger.log(f"LuaTools: ApplySettingsChanges result: {result}")
-        except Exception:
-            pass
-        response = json.dumps(result)
-        try:
-            logger.log(f"LuaTools: ApplySettingsChanges response json: {response}")
-        except Exception:
-            pass
-        return response
+        return json.dumps(result)
     except Exception as exc:
         logger.warn(f"LuaTools: ApplySettingsChanges failed: {exc}")
         return json.dumps({"success": False, "error": str(exc)})
@@ -1005,40 +937,46 @@ class Plugin:
         ensure_http_client("InitApis")
         ensure_temp_download_dir()
 
-        try:
-            message = apply_pending_update_if_any()
-            if message:
-                store_last_message(message)
-        except Exception as exc:
-            logger.warn(f"AutoUpdate: apply pending failed: {exc}")
-
-        try:
-            init_applist()
-        except Exception as exc:
-            logger.warn(f"LuaTools: Applist initialization failed: {exc}")
-
-        # --- INICIALIZAÇÃO DA GAMES DB ---
-        try:
-            init_games_db()
-        except Exception as exc:
-            logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
-        # ---------------------------------
-
+        # Webkit files must be registered before Millennium.ready()
         _copy_webkit_files()
         _inject_webkit_files()
 
-        try:
-            result = InitApis("boot")
-            logger.log(f"InitApis (boot) return: {result}")
-        except Exception as exc:
-            logger.error(f"InitApis (boot) failed: {exc}")
-
-        try:
-            start_auto_update_background_check()
-        except Exception as exc:
-            logger.warn(f"AutoUpdate: start background check failed: {exc}")
-
+        # Signal Millennium that the plugin is ready immediately — all heavy
+        # I/O (applist load, games DB download, InitApis, auto-update) runs
+        # in a background thread so it never blocks the main thread.
         Millennium.ready()
+
+        def _background_init():
+            try:
+                message = apply_pending_update_if_any()
+                if message:
+                    store_last_message(message)
+            except Exception as exc:
+                logger.warn(f"AutoUpdate: apply pending failed: {exc}")
+
+            try:
+                init_applist()
+            except Exception as exc:
+                logger.warn(f"LuaTools: Applist initialization failed: {exc}")
+
+            try:
+                init_games_db()
+            except Exception as exc:
+                logger.warn(f"LuaTools: Games DB initialization failed: {exc}")
+
+            try:
+                result = InitApis("boot")
+                logger.log(f"InitApis (boot) return: {result}")
+            except Exception as exc:
+                logger.error(f"InitApis (boot) failed: {exc}")
+
+            try:
+                start_auto_update_background_check()
+            except Exception as exc:
+                logger.warn(f"AutoUpdate: start background check failed: {exc}")
+
+        t = threading.Thread(target=_background_init, daemon=True, name="LuaTools-init")
+        t.start()
 
     def _unload(self):
         logger.log("unloading")

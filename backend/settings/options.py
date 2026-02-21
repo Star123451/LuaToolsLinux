@@ -39,6 +39,14 @@ SETTINGS_GROUPS: List[SettingGroup] = [
                 metadata={"dynamicChoices": "locales"},
             ),
             SettingOption(
+                key="theme",
+                label="Theme",
+                option_type="select",
+                description="Choose the color theme for LuaTools interface.",
+                default="original",
+                metadata={"dynamicChoices": "themes"},
+            ),
+            SettingOption(
                 key="donateKeys",
                 label="Donate Keys",
                 option_type="toggle",

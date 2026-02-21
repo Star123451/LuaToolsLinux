@@ -46,51 +46,336 @@
         window.__LuaToolsI18n = stored;
     }
 
-    function ensureLuaToolsStyles() {
-        if (document.getElementById('luatools-styles')) return;
+    // Theme definitions (pulled from themes.json; inline only used as fallback)
+    const DEFAULT_THEMES = {
+        original: {
+            name: 'Original',
+            bgPrimary: '#1b2838',
+            bgSecondary: '#2a475e',
+            bgTertiary: 'rgba(7, 7, 7, 0.86)',
+            bgHover: 'rgba(7, 7, 7, 0.86)',
+            bgContainer: 'rgba(11,20,30,0.6)',
+            bgContainerGradient: 'rgba(11, 20, 30, 0.85), #0b141e',
+            accent: '#66c0f4',
+            accentLight: '#a4d7f5',
+            accentDark: '#4a9ece',
+            border: 'rgba(102,192,244,0.3)',
+            borderHover: 'rgba(102,192,244,0.8)',
+            text: '#fff',
+            textSecondary: '#c7d5e0',
+            gradient: 'linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%)',
+            gradientLight: 'linear-gradient(135deg, #a4d7f5 0%, #7dd4ff 100%)',
+            shadow: 'rgba(102,192,244,0.4)',
+            shadowHover: 'rgba(102,192,244,0.6)',
+        }
+    };
+
+    // Runtime THEMES map - start with fallback, then hydrate from themes.json/backend.
+    let THEMES = DEFAULT_THEMES;
+    let themesLoaded = false;
+
+    function normalizeThemesPayload(input) {
         try {
-            const style = document.createElement('style');
-            style.id = 'luatools-styles';
-            style.textContent = `
+            let payload = input;
+            if (typeof payload === 'string') payload = JSON.parse(payload);
+            if (payload && typeof payload === 'object') {
+                if (Array.isArray(payload.themes)) return payload.themes;
+                if (Array.isArray(payload.result)) return payload.result;
+                if (payload.result && Array.isArray(payload.result.themes)) return payload.result.themes;
+                if (Array.isArray(payload.value)) return payload.value;
+            }
+            if (Array.isArray(payload)) return payload;
+        } catch (_) {
+            /* ignore */ }
+        return [];
+    }
+
+    function _applyBackendThemes(themesArray) {
+        try {
+            const themes = normalizeThemesPayload(themesArray);
+            if (!Array.isArray(themes) || themes.length === 0) return;
+            const map = {};
+            themes.forEach(function(t) {
+                if (!t || (!t.value && !t.key)) return;
+                const key = t.value || t.key;
+                map[key] = Object.assign({}, t, {
+                    value: key,
+                    name: t.name || key
+                });
+            });
+            if (Object.keys(map).length === 0) return;
+            // Merge into existing THEMES if themes have been loaded, otherwise start from DEFAULT_THEMES
+            THEMES = Object.assign({}, (themesLoaded ? THEMES : DEFAULT_THEMES), map);
+            themesLoaded = true;
+            try {
+                ensureLuaToolsStyles();
+            } catch (_) {}
+        } catch (e) {
+            console.warn('Failed to apply backend themes', e);
+        }
+    }
+
+    function loadThemesFromFile() {
+        try {
+            return fetch('themes/themes.json', {
+                cache: 'no-store'
+            }).then(function(res) {
+                if (!res || !res.ok) return null;
+                return res.json();
+            }).then(function(json) {
+                if (!json) return null;
+                _applyBackendThemes(json);
+                return json;
+            }).catch(function() {
+                return null;
+            });
+        } catch (_) {
+            return Promise.resolve(null);
+        }
+    }
+
+    function loadThemesFromBackend() {
+        if (typeof Millennium === 'undefined' || typeof Millennium.callServerMethod !== 'function') {
+            return Promise.resolve(null);
+        }
+        return Millennium.callServerMethod('luatools', 'GetThemes', {
+            contentScriptQuery: ''
+        }).then(function(res) {
+            try {
+                const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                if (payload && payload.success && payload.themes) {
+                    _applyBackendThemes(payload.themes);
+                    return payload.themes;
+                }
+            } catch (_) {}
+            return null;
+        }).catch(function() {
+            return null;
+        });
+    }
+
+    function loadThemes() {
+        return Promise.all([
+            loadThemesFromFile(),
+            loadThemesFromBackend()
+        ]).catch(function() {
+            /* ignore */ });
+    }
+
+    // Trigger load (non-blocking). Keeps DEFAULT_THEMES as a safe fallback.
+    const themeLoadPromise = loadThemes();
+
+    function getCurrentThemeKey() {
+        try {
+            const settings = window.__LuaToolsSettings || {};
+            const themeKey = (settings.values || {}).general || {};
+            return themeKey.theme || 'original';
+        } catch (e) {
+            return 'original';
+        }
+    }
+
+    function getCurrentTheme() {
+        try {
+            const themeName = getCurrentThemeKey();
+            const theme = THEMES[themeName] || THEMES.original;
+            if (!THEMES[themeName]) {
+                try {
+                    backendLog('LuaTools: Theme ' + themeName + ' not found in THEMES, using original. Available: ' + Object.keys(THEMES).join(', '));
+                } catch (_) {}
+            }
+            return theme;
+        } catch (e) {
+            return THEMES.original;
+        }
+    }
+
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ] : [102, 192, 244];
+    }
+
+    function getThemeColors() {
+        const theme = getCurrentTheme();
+        const rgb = hexToRgb(theme.accent);
+        return {
+            modalBg: `linear-gradient(135deg, ${theme.bgPrimary} 0%, ${theme.bgSecondary} 100%)`,
+            border: theme.accent,
+            borderRgba: theme.border,
+            text: theme.text,
+            textSecondary: theme.textSecondary,
+            accent: theme.accent,
+            accentLight: theme.accentLight,
+            gradient: theme.gradient,
+            gradientLight: theme.gradientLight,
+            shadow: theme.shadow,
+            shadowHover: theme.shadowHover,
+            shadowRgba: theme.shadow.replace('0.4', '0.3'),
+            bgContainer: theme.bgContainer,
+            bgTertiary: theme.bgTertiary,
+            bgHover: theme.bgHover,
+            rgbString: rgb.join(',')
+        };
+    }
+
+    function generateThemeStyles(theme) {
+        // Compute rgb triplet from accent hex so we can build rgba() values
+        const _rgb = (function() {
+            try {
+                const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(theme.accent || '#66c0f4');
+                return r ? [parseInt(r[1],16), parseInt(r[2],16), parseInt(r[3],16)].join(',') : '102,192,244';
+            } catch(_) { return '102,192,244'; }
+        })();
+
+        const _bgPrimary    = theme.bgPrimary    || '#1b2838';
+        const _bgSecondary  = theme.bgSecondary  || '#2a475e';
+        const _bgTertiary   = theme.bgTertiary   || 'rgba(7,7,7,0.86)';
+        const _bgHover      = theme.bgHover      || 'rgba(7,7,7,0.86)';
+        const _accent       = theme.accent       || '#66c0f4';
+        const _accentLight  = theme.accentLight  || '#a4d7f5';
+        const _border       = theme.border       || 'rgba(102,192,244,0.3)';
+        const _borderHover  = theme.borderHover  || 'rgba(102,192,244,0.8)';
+        const _text         = theme.text         || '#fff';
+        const _textSec      = theme.textSecondary|| '#c7d5e0';
+        const _gradient     = theme.gradient     || 'linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%)';
+        const _gradientLight= theme.gradientLight|| 'linear-gradient(135deg, #a4d7f5 0%, #7dd4ff 100%)';
+        const _shadow       = theme.shadow       || 'rgba(102,192,244,0.4)';
+        const _shadowHover  = theme.shadowHover  || 'rgba(102,192,244,0.6)';
+
+        const _bgContainer  = theme.bgContainer  || 'rgba(11,20,30,0.6)';
+
+        // Pre-computed composite values used in inline styles
+        const _modalBg          = 'linear-gradient(135deg, ' + _bgPrimary + ' 0%, ' + _bgSecondary + ' 100%)';
+        const _iconBtnBg        = 'rgba(' + _rgb + ', 0.1)';
+        const _iconBtnHover     = 'rgba(' + _rgb + ', 0.25)';
+        const _actionBtnHover   = 'linear-gradient(135deg, rgba(' + _rgb + ', 0.3) 0%, rgba(' + _rgb + ', 0.15) 100%)';
+        const _itemBg           = 'linear-gradient(135deg, rgba(' + _rgb + ', 0.15) 0%, rgba(' + _rgb + ', 0.05) 100%)';
+        const _borderMid        = _border.replace('0.3', '0.5');
+
+        return `
+            :root {
+                --lt-bg-primary: ${_bgPrimary};
+                --lt-bg-secondary: ${_bgSecondary};
+                --lt-bg-tertiary: ${_bgTertiary};
+                --lt-bg-hover: ${_bgHover};
+                --lt-bg-container: ${_bgContainer};
+                --lt-accent: ${_accent};
+                --lt-accent-light: ${_accentLight};
+                --lt-border: ${_border};
+                --lt-border-hover: ${_borderHover};
+                --lt-text: ${_text};
+                --lt-text-secondary: ${_textSec};
+                --lt-gradient: ${_gradient};
+                --lt-gradient-light: ${_gradientLight};
+                --lt-shadow: ${_shadow};
+                --lt-shadow-hover: ${_shadowHover};
+                --lt-modal-bg: ${_modalBg};
+                --lt-icon-btn-bg: ${_iconBtnBg};
+                --lt-icon-btn-hover: ${_iconBtnHover};
+                --lt-action-btn-hover: ${_actionBtnHover};
+                --lt-item-bg: ${_itemBg};
+            }
+
+            /* Force overlay backdrops to follow the active theme */
+            .luatools-settings-overlay,
+            .luatools-overlay,
+            .luatools-fixes-results-overlay,
+            .luatools-loading-fixes-overlay,
+            .luatools-unfix-overlay,
+            .luatools-settings-manager-overlay,
+            .luatools-loadedapps-overlay {
+                background: rgba(${_rgb}, 0.12) !important;
+                backdrop-filter: blur(8px) !important;
+            }
+
+            /* Select dropdowns inside overlays */
+            .luatools-settings-overlay select,
+            .luatools-settings-manager-overlay select,
+            .luatools-overlay select,
+            .luatools-fixes-results-overlay select,
+            .luatools-loadedapps-overlay select {
+                background-color: ${_bgTertiary} !important;
+                color: ${_text} !important;
+                border: 1px solid ${_border} !important;
+                border-radius: 3px !important;
+                padding: 6px 8px !important;
+                font-size: 14px !important;
+            }
+            .luatools-settings-overlay select option,
+            .luatools-settings-manager-overlay select option,
+            .luatools-overlay select option,
+            .luatools-fixes-results-overlay select option,
+            .luatools-loadedapps-overlay select option {
+                background-color: ${_bgPrimary} !important;
+                color: ${_text} !important;
+            }
+            .luatools-settings-overlay select option:checked,
+            .luatools-settings-manager-overlay select option:checked,
+            .luatools-overlay select option:checked,
+            .luatools-fixes-results-overlay select option:checked,
+            .luatools-loadedapps-overlay select option:checked {
+                background: ${_accent} !important;
+                color: ${_text} !important;
+            }
+            .luatools-settings-overlay select:hover,
+            .luatools-settings-manager-overlay select:hover,
+            .luatools-overlay select:hover,
+            .luatools-fixes-results-overlay select:hover,
+            .luatools-loadedapps-overlay select:hover {
+                border-color: ${_borderHover} !important;
+            }
+            .luatools-settings-overlay select:focus,
+            .luatools-settings-manager-overlay select:focus,
+            .luatools-overlay select:focus,
+            .luatools-fixes-results-overlay select:focus,
+            .luatools-loadedapps-overlay select:focus {
+                outline: none !important;
+                border-color: ${_accent} !important;
+                box-shadow: 0 0 0 2px ${_shadow} !important;
+            }
             .luatools-btn {
                 padding: 12px 24px;
-                background: rgba(102,192,244,0.15);
-                border: 2px solid rgba(102,192,244,0.4);
+                background: ${_bgTertiary};
+                border: 2px solid ${_borderMid};
                 border-radius: 12px;
-                color: #66c0f4;
+                color: ${_text};
                 font-size: 15px;
                 font-weight: 600;
                 text-decoration: none;
                 transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
                 cursor: pointer;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                box-shadow: 0 2px 8px ${_shadow};
                 letter-spacing: 0.3px;
             }
             .luatools-btn:hover:not([data-disabled="1"]) {
-                background: rgba(102,192,244,0.25);
+                background: ${_bgHover};
                 transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(102,192,244,0.3);
-                border-color: #66c0f4;
+                box-shadow: 0 6px 20px ${_shadowHover};
+                border-color: ${_borderHover};
             }
             .luatools-btn.primary {
-                background: linear-gradient(135deg, #66c0f4 0%, #4a9ece 100%);
-                border-color: #66c0f4;
-                color: #0f1923;
+                background: ${_gradient};
+                border-color: ${_borderHover};
+                color: ${_text};
                 font-weight: 700;
-                box-shadow: 0 4px 15px rgba(102,192,244,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
-                text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                box-shadow: 0 4px 15px ${_shadow}, inset 0 1px 0 rgba(255,255,255,0.3);
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
             }
             .luatools-btn.primary:hover:not([data-disabled="1"]) {
-                background: linear-gradient(135deg, #7dd4ff 0%, #5ab3e8 100%);
+                background: ${_gradientLight};
                 transform: translateY(-3px) scale(1.03);
-                box-shadow: 0 8px 25px rgba(102,192,244,0.6), inset 0 1px 0 rgba(255,255,255,0.4);
+                box-shadow: 0 8px 25px ${_shadowHover}, inset 0 1px 0 rgba(255,255,255,0.4);
             }
             .luatools-input-group { margin-bottom: 12px; }
-            .luatools-input-label { display: block; font-size: 13px; color: #a9b2c3; margin-bottom: 6px; font-weight: 600; }
-            .luatools-input { width: 100%; padding: 10px; background: #16202d; border: 1px solid #2a475e; border-radius: 6px; color: #dfe6f0; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
-            .luatools-input:focus { border-color: #66c0f4; outline: none; }
+            .luatools-input-label { display: block; font-size: 13px; color: ${_textSec}; margin-bottom: 6px; font-weight: 600; }
+            .luatools-input { width: 100%; padding: 10px; background: ${_bgPrimary}; border: 1px solid ${_border}; border-radius: 6px; color: ${_text}; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
+            .luatools-input:focus { border-color: ${_accent}; outline: none; }
 
-            /* FIX FOR ICON BUTTON ALIGNMENT */
+            /* Icon button sizing fix */
             .luatools-icon-button {
                 padding: 0 !important;
                 width: 34px !important;
@@ -107,22 +392,65 @@
                 to { opacity: 1; }
             }
             @keyframes slideUp {
-                from {
-                    opacity: 0;
-                    transform: scale(0.9);
-                }
-                to {
-                    opacity: 1;
-                    transform: scale(1);
-                }
+                from { opacity: 0; transform: scale(0.9); }
+                to   { opacity: 1; transform: scale(1);   }
+            }
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to   { transform: rotate(360deg); }
             }
             @keyframes pulse {
                 0%, 100% { opacity: 1; }
-                50% { opacity: 0.7; }
+                50%       { opacity: 0.7; }
             }
-            `;
-            document.head.appendChild(style);
-        } catch(err) { backendLog('LuaTools: Styles injection failed: ' + err); }
+        `;
+    }
+
+    function ensureThemeStylesheet(themeKey) {
+        const id = 'luatools-theme-css';
+        const href = 'themes/' + themeKey + '.css';
+        const link = document.getElementById(id);
+        if (link) {
+            const currentTheme = link.getAttribute('data-theme');
+            if (currentTheme === themeKey) return;
+            link.href = href;
+            link.setAttribute('data-theme', themeKey);
+            return;
+        }
+        try {
+            const el = document.createElement('link');
+            el.id = id;
+            el.rel = 'stylesheet';
+            el.href = href;
+            el.setAttribute('data-theme', themeKey);
+            document.head.appendChild(el);
+        } catch (err) {
+            backendLog('LuaTools: Theme CSS injection failed: ' + err);
+        }
+    }
+
+    function ensureLuaToolsStyles() {
+        const styleEl = document.getElementById('luatools-styles');
+        const themeKey = getCurrentThemeKey();
+        const theme = getCurrentTheme();
+        const styles = generateThemeStyles(theme);
+
+        try {
+            ensureThemeStylesheet(themeKey);
+        } catch (_) {}
+
+        if (styleEl) {
+            styleEl.textContent = styles;
+        } else {
+            try {
+                const style = document.createElement('style');
+                style.id = 'luatools-styles';
+                style.textContent = styles;
+                document.head.appendChild(style);
+            } catch (err) {
+                backendLog('LuaTools: Styles injection failed: ' + err);
+            }
+        }
     }
 
     function ensureFontAwesome() {
@@ -137,6 +465,120 @@
             link.referrerPolicy = 'no-referrer';
             document.head.appendChild(link);
         } catch(err) { backendLog('LuaTools: Font Awesome injection failed: ' + err); }
+    }
+
+    // Millennium disclaimer modal
+    function showMillenniumDisclaimerModal() {
+        if (document.querySelector('.luatools-disclaimer-overlay')) return;
+
+        ensureLuaToolsStyles();
+        ensureFontAwesome();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'luatools-disclaimer-overlay luatools-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(10px);z-index:100005;display:flex;align-items:center;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:linear-gradient(180deg,#3a0f0f,#2a0b0b);color:#fff;border:2px solid rgba(255,80,80,0.9);border-radius:12px;width:580px;padding:36px;box-shadow:0 25px 70px rgba(0,0,0,.9);animation:slideUp 0.2s ease-out;';
+
+        const iconContainer = document.createElement('div');
+        iconContainer.style.cssText = 'text-align:center;margin-bottom:20px;';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-triangle-exclamation';
+        icon.style.cssText = 'color:#ff5c5c;font-size:48px;filter:drop-shadow(0 0 10px rgba(255,92,92,0.5));';
+        iconContainer.appendChild(icon);
+
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:24px;font-weight:800;text-align:center;margin-bottom:24px;color:#ff5c5c;letter-spacing:0.5px;';
+        titleEl.textContent = t('disclaimer.title', 'Security & Support Notice');
+
+        const messageEl = document.createElement('div');
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#ffecec;text-align:center;';
+
+        const line1 = document.createElement('div');
+        line1.style.cssText = 'margin-bottom:12px;font-weight:600;';
+        line1.textContent = t('disclaimer.line1', 'LuaTools is not affiliated in any way with Millennium');
+
+        const line2 = document.createElement('div');
+        line2.style.cssText = 'margin-bottom:12px;';
+        line2.textContent = t('disclaimer.line2', 'Millennium will NOT offer you support for this plugin on their discord server');
+
+        const line3 = document.createElement('div');
+        line3.style.cssText = 'font-weight:700;color:#ff8e8e;';
+        line3.textContent = t('disclaimer.line3', 'You will be BANNED from both LuaTools and Millennium servers if you go to their discord asking for help');
+
+        messageEl.appendChild(line1);
+        messageEl.appendChild(line2);
+        messageEl.appendChild(line3);
+
+        const inputGroup = document.createElement('div');
+        inputGroup.style.cssText = 'margin-bottom:24px;';
+
+        const inputLabel = document.createElement('div');
+        inputLabel.style.cssText = 'font-size:12px;color:#8f98a0;margin-bottom:10px;text-align:center;text-transform:uppercase;letter-spacing:1px;';
+        inputLabel.textContent = t('disclaimer.inputLabel', 'type "I Understand" in the box bellow to continue');
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = t('disclaimer.inputPlaceholder', 'I Understand');
+        input.style.cssText = 'width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px;color:#fff;font-size:14px;outline:none;text-align:center;transition:all 0.3s ease;';
+        input.onfocus = function() {
+            this.style.borderColor = 'rgba(255,255,255,0.3)';
+            this.style.background = 'rgba(0,0,0,0.4)';
+        };
+        input.onblur = function() {
+            this.style.borderColor = 'rgba(255,255,255,0.1)';
+            this.style.background = 'rgba(0,0,0,0.3)';
+        };
+
+        inputGroup.appendChild(inputLabel);
+        inputGroup.appendChild(input);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;justify-content:center;';
+
+        const confirmBtn = document.createElement('a');
+        confirmBtn.href = '#';
+        confirmBtn.className = 'luatools-btn primary';
+        confirmBtn.style.minWidth = '200px';
+        confirmBtn.innerHTML = `<span>${lt('Confirm')}</span>`;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.pointerEvents = 'none';
+
+        var expectedPhrase = t('disclaimer.inputPlaceholder', 'I Understand').trim().toLowerCase();
+        input.oninput = function() {
+            if (this.value.trim().toLowerCase() === expectedPhrase) {
+                confirmBtn.style.opacity = '1';
+                confirmBtn.style.pointerEvents = 'auto';
+                confirmBtn.style.boxShadow = '0 0 15px var(--lt-shadow)';
+            } else {
+                confirmBtn.style.opacity = '0.5';
+                confirmBtn.style.pointerEvents = 'none';
+                confirmBtn.style.boxShadow = 'none';
+            }
+        };
+
+        confirmBtn.onclick = function(e) {
+            e.preventDefault();
+            if (input.value.trim().toLowerCase() === expectedPhrase) {
+                localStorage.setItem('luatools millennium disclaimer accepted', '1');
+                overlay.remove();
+            }
+        };
+
+        btnRow.appendChild(confirmBtn);
+
+        modal.appendChild(iconContainer);
+        modal.appendChild(titleEl);
+        modal.appendChild(messageEl);
+        modal.appendChild(inputGroup);
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+
+        document.body.appendChild(overlay);
+
+        // Focus input after a short delay
+        setTimeout(() => input.focus(), 300);
     }
 
     function showSettingsPopup() {
@@ -156,13 +598,13 @@
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
             const modal = document.createElement('div');
-            modal.style.cssText = 'position:relative;background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:420px;max-width:600px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+            modal.style.cssText = 'position:relative;background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:420px;max-width:600px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
             const header = document.createElement('div');
-            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid rgba(102,192,244,0.3);';
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--lt-border);';
 
             const title = document.createElement('div');
-            title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+            title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
             title.textContent = t('menu.title', 'LuaTools · Menu');
 
             const iconButtons = document.createElement('div');
@@ -172,11 +614,11 @@
                 const btn = document.createElement('a');
                 btn.id = id;
                 btn.href = '#';
-                btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(102,192,244,0.1);border:1px solid rgba(102,192,244,0.3);border-radius:10px;color:#66c0f4;font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+                btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:var(--lt-icon-btn-bg);border:1px solid var(--lt-border);border-radius:10px;color:var(--lt-accent);font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
                 btn.innerHTML = '<i class="fa-solid ' + iconClass + '"></i>';
                 btn.title = t(titleKey, titleFallback);
-                btn.onmouseover = function() { this.style.background = 'rgba(102,192,244,0.25)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px rgba(102,192,244,0.3)'; this.style.borderColor = '#66c0f4'; };
-                btn.onmouseout = function() { this.style.background = 'rgba(102,192,244,0.1)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+                btn.onmouseover = function() { this.style.background = 'var(--lt-icon-btn-hover)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px var(--lt-border)'; this.style.borderColor = 'var(--lt-accent)'; };
+                btn.onmouseout = function() { this.style.background = 'var(--lt-icon-btn-bg)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
                 iconButtons.appendChild(btn);
                 return btn;
             }
@@ -190,7 +632,7 @@
             function createSectionLabel(key, fallback, marginTop) {
                 const label = document.createElement('div');
                 const topValue = typeof marginTop === 'number' ? marginTop : 12;
-                label.style.cssText = 'font-size:12px;color:#66c0f4;margin-top:' + topValue + 'px;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;text-align:center;';
+                label.style.cssText = 'font-size:12px;color:var(--lt-accent);margin-top:' + topValue + 'px;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;text-align:center;';
                 label.textContent = t(key, fallback);
                 container.appendChild(label);
                 return label;
@@ -200,12 +642,12 @@
                 const btn = document.createElement('a');
                 btn.id = id;
                 btn.href = '#';
-                btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;background:linear-gradient(135deg, rgba(102,192,244,0.15) 0%, rgba(102,192,244,0.05) 100%);border:1px solid rgba(102,192,244,0.3);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;position:relative;overflow:hidden;text-align:center;';
+                btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;background:var(--lt-item-bg);border:1px solid var(--lt-border);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;position:relative;overflow:hidden;text-align:center;';
                 const iconHtml = iconClass ? '<i class="fa-solid ' + iconClass + '" style="font-size:16px;"></i>' : '';
                 const textSpan = '<span style="text-align:center;">' + t(key, fallback) + '</span>';
                 btn.innerHTML = iconHtml + textSpan;
-                btn.onmouseover = function() { this.style.background = 'linear-gradient(135deg, rgba(102,192,244,0.3) 0%, rgba(102,192,244,0.15) 100%)'; this.style.transform = 'translateY(-2px)'; this.style.boxShadow = '0 8px 20px rgba(102,192,244,0.25)'; this.style.borderColor = '#66c0f4'; };
-                btn.onmouseout = function() { this.style.background = 'linear-gradient(135deg, rgba(102,192,244,0.15) 0%, rgba(102,192,244,0.05) 100%)'; this.style.transform = 'translateY(0)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+                btn.onmouseover = function() { this.style.background = 'var(--lt-action-btn-hover)'; this.style.transform = 'translateY(-2px)'; this.style.boxShadow = '0 8px 20px var(--lt-shadow)'; this.style.borderColor = 'var(--lt-accent)'; };
+                btn.onmouseout = function() { this.style.background = 'var(--lt-item-bg)'; this.style.transform = 'translateY(0)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
                 container.appendChild(btn);
                 return btn;
             }
@@ -509,10 +951,10 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.className = 'luatools-title';
         title.textContent = 'LuaTools';
 
@@ -522,10 +964,10 @@
         body.textContent = lt('Working…');
 
         const progressWrap = document.createElement('div');
-        progressWrap.style.cssText = 'background:rgba(42,71,94,0.5);height:12px;border-radius:4px;overflow:hidden;position:relative;display:none;border:1px solid rgba(102,192,244,0.3);';
+        progressWrap.style.cssText = 'background:rgba(42,71,94,0.5);height:12px;border-radius:4px;overflow:hidden;position:relative;display:none;border:1px solid var(--lt-border);';
         progressWrap.className = 'luatools-progress-wrap';
         const progressBar = document.createElement('div');
-        progressBar.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg, #66c0f4 0%, #a4d7f5 100%);transition:width 0.1s linear;box-shadow:0 0 10px rgba(102,192,244,0.5);';
+        progressBar.style.cssText = 'height:100%;width:0%;background:var(--lt-gradient);transition:width 0.1s linear;box-shadow:0 0 10px var(--lt-shadow);';
         progressBar.className = 'luatools-progress-bar';
         progressWrap.appendChild(progressBar);
 
@@ -605,13 +1047,13 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'position:relative;background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:580px;max-width:700px;max-height:80vh;display:flex;flex-direction:column;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'position:relative;background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:580px;max-width:700px;max-height:80vh;display:flex;flex-direction:column;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const header = document.createElement('div');
-        header.style.cssText = 'flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid rgba(102,192,244,0.3);';
+        header.style.cssText = 'flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--lt-border);';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.textContent = lt('LuaTools · Fixes Menu');
 
         const iconButtons = document.createElement('div');
@@ -621,11 +1063,11 @@
             const btn = document.createElement('a');
             btn.id = id;
             btn.href = '#';
-            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(102,192,244,0.1);border:1px solid rgba(102,192,244,0.3);border-radius:10px;color:#66c0f4;font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:var(--lt-icon-btn-bg);border:1px solid var(--lt-border);border-radius:10px;color:var(--lt-accent);font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
             btn.innerHTML = '<i class="fa-solid ' + iconClass + '"></i>';
             btn.title = t(titleKey, titleFallback);
-            btn.onmouseover = function() { this.style.background = 'rgba(102,192,244,0.25)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px rgba(102,192,244,0.3)'; this.style.borderColor = '#66c0f4'; };
-            btn.onmouseout = function() { this.style.background = 'rgba(102,192,244,0.1)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+            btn.onmouseover = function() { this.style.background = 'var(--lt-icon-btn-hover)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px var(--lt-border)'; this.style.borderColor = 'var(--lt-accent)'; };
+            btn.onmouseout = function() { this.style.background = 'var(--lt-icon-btn-bg)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
             iconButtons.appendChild(btn);
             return btn;
         }
@@ -635,7 +1077,7 @@
         const closeIconBtn = createIconButton('lt-fixes-close', 'fa-xmark', 'settings.close', 'Close');
 
         const body = document.createElement('div');
-        body.style.cssText = 'flex:1 1 auto;overflow-y:auto;padding:20px;border:1px solid rgba(102,192,244,0.3);border-radius:12px;background:rgba(11,20,30,0.6);';
+        body.style.cssText = 'flex:1 1 auto;overflow-y:auto;padding:20px;border:1px solid var(--lt-border);border-radius:12px;background:rgba(11,20,30,0.6);';
 
         try {
             const bannerImg = document.querySelector('.game_header_image_full');
@@ -680,12 +1122,12 @@
             section.style.cssText = 'width:100%;text-align:center;';
 
             const sectionLabel = document.createElement('div');
-            sectionLabel.style.cssText = 'font-size:12px;color:#66c0f4;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:1px;';
+            sectionLabel.style.cssText = 'font-size:12px;color:var(--lt-accent);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:1px;';
             sectionLabel.textContent = label;
 
             const btn = document.createElement('a');
             btn.href = '#';
-            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;padding:14px 24px;background:linear-gradient(135deg, rgba(102,192,244,0.15) 0%, rgba(102,192,244,0.05) 100%);border:1px solid rgba(102,192,244,0.3);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;padding:14px 24px;background:var(--lt-item-bg);border:1px solid var(--lt-border);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
             btn.innerHTML = '<i class="fa-solid ' + icon + '" style="font-size:16px;"></i><span>' + text + '</span>';
 
             if (isSuccess) {
@@ -697,8 +1139,8 @@
                 btn.style.opacity = '0.5';
                 btn.style.cursor = 'not-allowed';
             } else {
-                btn.onmouseover = function() { this.style.background = 'linear-gradient(135deg, rgba(102,192,244,0.3) 0%, rgba(102,192,244,0.15) 100%)'; this.style.transform = 'translateY(-2px)'; this.style.boxShadow = '0 8px 20px rgba(102,192,244,0.25)'; this.style.borderColor = '#66c0f4'; };
-                btn.onmouseout = function() { this.style.background = 'linear-gradient(135deg, rgba(102,192,244,0.15) 0%, rgba(102,192,244,0.05) 100%)'; this.style.transform = 'translateY(0)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+                btn.onmouseover = function() { this.style.background = 'var(--lt-action-btn-hover)'; this.style.transform = 'translateY(-2px)'; this.style.boxShadow = '0 8px 20px var(--lt-shadow)'; this.style.borderColor = 'var(--lt-accent)'; };
+                btn.onmouseout = function() { this.style.background = 'var(--lt-item-bg)'; this.style.transform = 'translateY(0)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
             }
 
             btn.onclick = onClick;
@@ -1060,7 +1502,7 @@
         const creditMsg = document.createElement('div');
         creditMsg.style.cssText = 'margin-top:16px;text-align:center;font-size:13px;color:#8f98a0;';
         const creditTemplate = lt('Only possible thanks to {name} 💜');
-        creditMsg.innerHTML = creditTemplate.replace('{name}', '<a href="#" id="lt-shayenvi-link" style="color:#66c0f4;text-decoration:none;font-weight:600;">ShayneVi</a>');
+        creditMsg.innerHTML = creditTemplate.replace('{name}', '<a href="#" id="lt-shayenvi-link" style="color:var(--lt-accent);text-decoration:none;font-weight:600;">ShayneVi</a>');
 
         // Wire up ShayneVi link
         setTimeout(function(){
@@ -1088,8 +1530,8 @@
         <div style="display: flex; align-items: center; gap: 12px;">
         <div id="accela-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #8f98a0; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>
         <div style="display: flex; flex-direction: column;">
-        <span style="font-size: 10px; color: #66c0f4; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">ACCELA STATUS</span>
-        <span id="accela-status-text" style="font-size: 13px; color: #c7d5e0; font-weight: 500;">Checking version...</span>
+        <span style="font-size: 10px; color:var(--lt-accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">ACCELA STATUS</span>
+        <span id="accela-status-text" style="font-size: 13px; color:var(--lt-text-secondary); font-weight: 500;">Checking version...</span>
         </div>
         </div>
         `;
@@ -1234,20 +1676,20 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.textContent = lt('Loading fixes...');
 
         const body = document.createElement('div');
-        body.style.cssText = 'font-size:14px;line-height:1.6;margin-bottom:16px;color:#c7d5e0;';
+        body.style.cssText = 'font-size:14px;line-height:1.6;margin-bottom:16px;color:var(--lt-text-secondary);';
         body.textContent = lt('Checking availability…');
 
         const progressWrap = document.createElement('div');
-        progressWrap.style.cssText = 'background:rgba(42,71,94,0.5);height:12px;border-radius:4px;overflow:hidden;position:relative;border:1px solid rgba(102,192,244,0.3);';
+        progressWrap.style.cssText = 'background:rgba(42,71,94,0.5);height:12px;border-radius:4px;overflow:hidden;position:relative;border:1px solid var(--lt-border);';
         const progressBar = document.createElement('div');
-        progressBar.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg, #66c0f4 0%, #a4d7f5 100%);transition:width 0.2s linear;box-shadow:0 0 10px rgba(102,192,244,0.5);';
+        progressBar.style.cssText = 'height:100%;width:0%;background:var(--lt-gradient);transition:width 0.2s linear;box-shadow:0 0 10px var(--lt-shadow);';
         progressWrap.appendChild(progressBar);
 
         modal.appendChild(title);
@@ -1350,14 +1792,14 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.textContent = lt('Applying {fix}').replace('{fix}', fixType);
 
         const body = document.createElement('div');
-        body.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:20px;color:#c7d5e0;';
+        body.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:20px;color:var(--lt-text-secondary);';
         body.innerHTML = '<div id="lt-fix-progress-msg">' + lt('Downloading...') + '</div>';
 
         const btnRow = document.createElement('div');
@@ -1498,14 +1940,14 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:400px;max-width:560px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.textContent = lt('Un-Fixing game');
 
         const body = document.createElement('div');
-        body.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:20px;color:#c7d5e0;';
+        body.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:20px;color:var(--lt-text-secondary);';
         body.innerHTML = '<div id="lt-unfix-progress-msg">' + lt('Removing fix files...') + '</div>';
 
         const btnRow = document.createElement('div');
@@ -1679,13 +2121,13 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:100000;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'position:relative;background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:650px;max-width:750px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;overflow:hidden;';
+        modal.style.cssText = 'position:relative;background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:650px;max-width:750px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;overflow:hidden;';
 
         const header = document.createElement('div');
-        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:28px 32px 16px;border-bottom:2px solid rgba(102,192,244,0.3);';
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:28px 32px 16px;border-bottom:2px solid var(--lt-border);';
 
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        title.style.cssText = 'font-size:24px;color:#fff;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         title.textContent = t('settings.title', 'LuaTools · Settings');
 
         const iconButtons = document.createElement('div');
@@ -1693,24 +2135,24 @@
 
         const discordIconBtn = document.createElement('a');
         discordIconBtn.href = '#';
-        discordIconBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(102,192,244,0.1);border:1px solid rgba(102,192,244,0.3);border-radius:10px;color:#66c0f4;font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+        discordIconBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:var(--lt-icon-btn-bg);border:1px solid var(--lt-border);border-radius:10px;color:var(--lt-accent);font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
         discordIconBtn.innerHTML = '<i class="fa-brands fa-discord"></i>';
         discordIconBtn.title = t('menu.discord', 'Discord');
-        discordIconBtn.onmouseover = function() { this.style.background = 'rgba(102,192,244,0.25)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px rgba(102,192,244,0.3)'; this.style.borderColor = '#66c0f4'; };
-        discordIconBtn.onmouseout = function() { this.style.background = 'rgba(102,192,244,0.1)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+        discordIconBtn.onmouseover = function() { this.style.background = 'var(--lt-icon-btn-hover)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px var(--lt-border)'; this.style.borderColor = 'var(--lt-accent)'; };
+        discordIconBtn.onmouseout = function() { this.style.background = 'var(--lt-icon-btn-bg)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
         iconButtons.appendChild(discordIconBtn);
 
         const closeIconBtn = document.createElement('a');
         closeIconBtn.href = '#';
-        closeIconBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(102,192,244,0.1);border:1px solid rgba(102,192,244,0.3);border-radius:10px;color:#66c0f4;font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+        closeIconBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:var(--lt-icon-btn-bg);border:1px solid var(--lt-border);border-radius:10px;color:var(--lt-accent);font-size:18px;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
         closeIconBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
         closeIconBtn.title = t('settings.close', 'Close');
-        closeIconBtn.onmouseover = function() { this.style.background = 'rgba(102,192,244,0.25)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px rgba(102,192,244,0.3)'; this.style.borderColor = '#66c0f4'; };
-        closeIconBtn.onmouseout = function() { this.style.background = 'rgba(102,192,244,0.1)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'rgba(102,192,244,0.3)'; };
+        closeIconBtn.onmouseover = function() { this.style.background = 'var(--lt-icon-btn-hover)'; this.style.transform = 'translateY(-2px) scale(1.05)'; this.style.boxShadow = '0 8px 16px var(--lt-border)'; this.style.borderColor = 'var(--lt-accent)'; };
+        closeIconBtn.onmouseout = function() { this.style.background = 'var(--lt-icon-btn-bg)'; this.style.transform = 'translateY(0) scale(1)'; this.style.boxShadow = 'none'; this.style.borderColor = 'var(--lt-border)'; };
         iconButtons.appendChild(closeIconBtn);
 
         const contentWrap = document.createElement('div');
-        contentWrap.style.cssText = 'flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:20px;margin:0 24px;border:1px solid rgba(102,192,244,0.3);border-radius:12px;background:rgba(11,20,30,0.6);';
+        contentWrap.style.cssText = 'flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:20px;margin:0 24px;border:1px solid var(--lt-border);border-radius:12px;background:rgba(11,20,30,0.6);';
 
         const btnRow = document.createElement('div');
         btnRow.style.cssText = 'padding:20px 24px 24px;display:flex;gap:12px;justify-content:space-between;align-items:center;';
@@ -1789,11 +2231,11 @@
             if (!statusLine) {
                 statusLine = document.createElement('div');
                 statusLine.className = 'luatools-settings-status';
-                statusLine.style.cssText = 'font-size:13px;margin-top:10px;transform:translateY(15px);color:#c7d5e0;min-height:18px;text-align:center;';  // may god have mercy upon your soul for witnessing this translateY
+                statusLine.style.cssText = 'font-size:13px;margin-top:10px;transform:translateY(15px);color:var(--lt-text-secondary);min-height:18px;text-align:center;';  // may god have mercy upon your soul for witnessing this translateY
                 contentWrap.insertBefore(statusLine, contentWrap.firstChild);
             }
             statusLine.textContent = text || '';
-            statusLine.style.color = color || '#c7d5e0';
+            statusLine.style.color = color || 'var(--lt-text-secondary)';
         }
 
         function ensureDraftGroup(groupKey) {
@@ -1864,10 +2306,10 @@
         // --- NEW FUNCTION: Render API Management Section ---
         function renderApiManagementSection() {
             const sectionEl = document.createElement('div');
-            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:linear-gradient(135deg, rgba(16,32,57,0.8) 0%, rgba(20,40,70,0.8) 100%);border:2px solid rgba(102,192,244,0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
+            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:var(--lt-bg-container);border:2px solid var(--lt-border);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
 
             const title = document.createElement('div');
-            title.style.cssText = 'font-size:18px;color:#66c0f4;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
+            title.style.cssText = 'font-size:18px;color:var(--lt-accent);margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
             title.innerHTML = '<i class="fa-solid fa-key" style="margin-right:10px;"></i>' + t('settings.api.title', 'API & Authentication');
             sectionEl.appendChild(title);
 
@@ -2072,13 +2514,13 @@
 
             function updateUI(isYes) {
                 if (isYes) {
-                    yesBtn.style.background = '#66c0f4';
-                    yesBtn.querySelector('span').style.color = '#0b141e';
+                    yesBtn.style.background = 'var(--lt-accent)';
+                    yesBtn.querySelector('span').style.color = 'var(--lt-bg-primary)';
                     noBtn.style.background = '';
                     noBtn.querySelector('span').style.color = '';
                 } else {
-                    noBtn.style.background = '#66c0f4';
-                    noBtn.querySelector('span').style.color = '#0b141e';
+                    noBtn.style.background = 'var(--lt-accent)';
+                    noBtn.querySelector('span').style.color = 'var(--lt-bg-primary)';
                     yesBtn.style.background = '';
                     yesBtn.querySelector('span').style.color = '';
                 }
@@ -2215,7 +2657,7 @@
             contentWrap.innerHTML = '';
             if (!state.config || !Array.isArray(state.config.schema) || state.config.schema.length === 0) {
                 const emptyState = document.createElement('div');
-                emptyState.style.cssText = 'padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;';
+                emptyState.style.cssText = 'padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);';
                 emptyState.textContent = t('settings.empty', 'No settings available yet.');
                 contentWrap.appendChild(emptyState);
                 updateSaveState();
@@ -2234,13 +2676,13 @@
                 if (group.key === 'general') {
                     groupTitle.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;margin-top:-25px;font-weight:600;text-align:center;'; // dw abt this margin-top -25px 🇧🇷 don't even look at it
                 } else {
-                    groupTitle.style.cssText = 'font-size:15px;font-weight:600;color:#66c0f4;text-align:center;';
+                    groupTitle.style.cssText = 'font-size:15px;font-weight:600;color:var(--lt-accent);text-align:center;';
                 }
                 groupEl.appendChild(groupTitle);
 
                 if (group.description && group.key !== 'general') {
                     const groupDesc = document.createElement('div');
-                    groupDesc.style.cssText = 'margin-top:4px;font-size:13px;color:#c7d5e0;';
+                    groupDesc.style.cssText = 'margin-top:4px;font-size:13px;color:var(--lt-text-secondary);';
                     groupDesc.textContent = t('settings.' + group.key + 'Description', group.description);
                     groupEl.appendChild(groupDesc);
                 }
@@ -2261,7 +2703,7 @@
                     if (j === 0) {
                         optionEl.style.cssText = 'margin-top:12px;padding-top:0;';
                     } else {
-                        optionEl.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid rgba(102,192,244,0.1);';
+                        optionEl.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--lt-border);';
                     }
 
                     const optionLabel = document.createElement('div');
@@ -2283,7 +2725,7 @@
 
                     if (option.type === 'select') {
                         const selectEl = document.createElement('select');
-                        selectEl.style.cssText = 'width:100%;padding:6px 8px;background:#16202d;color:#dfe6f0;border:1px solid #2a475e;border-radius:3px;';
+                        selectEl.style.cssText = 'width:100%;padding:6px 8px;background:var(--lt-bg-primary);color:var(--lt-text);border:1px solid var(--lt-bg-secondary);border-radius:3px;';
 
                         const choices = Array.isArray(option.choices) ? option.choices : [];
                         for (let c = 0; c < choices.length; c++) {
@@ -2300,11 +2742,24 @@
                             selectEl.value = String(currentValue);
                         }
 
+                        const isDynamicTheme = option.metadata && option.metadata.dynamicChoices === 'themes';
+
                         selectEl.addEventListener('change', function(){
                             state.draft[group.key][option.key] = selectEl.value;
-                            try { backendLog('LuaTools: language select changed to ' + selectEl.value); } catch(_) {}
+                            try { backendLog('LuaTools: select changed ' + option.key + ' to ' + selectEl.value); } catch(_) {}
                             updateSaveState();
-                            setStatus(t('settings.unsaved', 'Unsaved changes'), '#c7d5e0');
+                            setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
+
+                            // Live-preview theme changes immediately
+                            if (isDynamicTheme) {
+                                try {
+                                    if (!window.__LuaToolsSettings) window.__LuaToolsSettings = {};
+                                    if (!window.__LuaToolsSettings.values) window.__LuaToolsSettings.values = {};
+                                    if (!window.__LuaToolsSettings.values.general) window.__LuaToolsSettings.values.general = {};
+                                    window.__LuaToolsSettings.values.general.theme = selectEl.value;
+                                    ensureLuaToolsStyles();
+                                } catch(_) {}
+                            }
                         });
 
                         controlWrap.appendChild(selectEl);
@@ -2335,16 +2790,16 @@
                         function refreshToggleButtons() {
                             const currentValue = state.draft[group.key][option.key] === true;
                             if (currentValue) {
-                                yesBtn.style.background = '#66c0f4';
-                                yesBtn.style.color = '#0b141e';
-                                if (yesSpan) yesSpan.style.color = '#0b141e';
+                                yesBtn.style.background = 'var(--lt-accent)';
+                                yesBtn.style.color = 'var(--lt-bg-primary)';
+                                if (yesSpan) yesSpan.style.color = 'var(--lt-bg-primary)';
                                 noBtn.style.background = '';
                                 noBtn.style.color = '';
                                 if (noSpan) noSpan.style.color = '';
                             } else {
-                                noBtn.style.background = '#66c0f4';
-                                noBtn.style.color = '#0b141e';
-                                if (noSpan) noSpan.style.color = '#0b141e';
+                                noBtn.style.background = 'var(--lt-accent)';
+                                noBtn.style.color = 'var(--lt-bg-primary)';
+                                if (noSpan) noSpan.style.color = 'var(--lt-bg-primary)';
                                 yesBtn.style.background = '';
                                 yesBtn.style.color = '';
                                 if (yesSpan) yesSpan.style.color = '';
@@ -2356,7 +2811,7 @@
                             state.draft[group.key][option.key] = true;
                             refreshToggleButtons();
                             updateSaveState();
-                            setStatus(t('settings.unsaved', 'Unsaved changes'), '#c7d5e0');
+                            setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
                         });
 
                         noBtn.addEventListener('click', function(e){
@@ -2364,7 +2819,7 @@
                             state.draft[group.key][option.key] = false;
                             refreshToggleButtons();
                             updateSaveState();
-                            setStatus(t('settings.unsaved', 'Unsaved changes'), '#c7d5e0');
+                            setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
                         });
 
                         toggleWrap.appendChild(yesBtn);
@@ -2403,14 +2858,14 @@
         function renderInstalledFixesSection() {
             const sectionEl = document.createElement('div');
             sectionEl.id = 'luatools-installed-fixes-section';
-            sectionEl.style.cssText = 'margin-top:36px;padding:24px;background:linear-gradient(135deg, rgba(102,192,244,0.05) 0%, rgba(74,158,206,0.08) 100%);border:2px solid rgba(74,158,206,0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden;';
+            sectionEl.style.cssText = 'margin-top:36px;padding:24px;background:var(--lt-bg-container);border:2px solid var(--lt-border);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden;';
 
             const sectionGlow = document.createElement('div');
-            sectionGlow.style.cssText = 'position:absolute;top:-100%;left:-100%;width:300%;height:300%;background:radial-gradient(circle, rgba(102,192,244,0.08) 0%, transparent 70%);pointer-events:none;';
+            sectionGlow.style.cssText = 'position:absolute;top:-100%;left:-100%;width:300%;height:300%;background:radial-gradient(circle, var(--lt-icon-btn-bg) 0%, transparent 70%);pointer-events:none;';
             sectionEl.appendChild(sectionGlow);
 
             const sectionTitle = document.createElement('div');
-            sectionTitle.style.cssText = 'font-size:22px;color:#66c0f4;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 10px rgba(102,192,244,0.5);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;z-index:1;letter-spacing:0.5px;';
+            sectionTitle.style.cssText = 'font-size:22px;color:var(--lt-accent);margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 10px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;z-index:1;letter-spacing:0.5px;';
             sectionTitle.innerHTML = '<i class="fa-solid fa-wrench" style="margin-right:10px;"></i>' + t('settings.installedFixes.title', 'Installed Fixes');
             sectionEl.appendChild(sectionTitle);
 
@@ -2425,7 +2880,7 @@
         }
 
         function loadInstalledFixes(container) {
-            container.innerHTML = '<div style="padding:14px;text-align:center;color:#c7d5e0;">' + t('settings.installedFixes.loading', 'Scanning for installed fixes...') + '</div>';
+            container.innerHTML = '<div style="padding:14px;text-align:center;color:var(--lt-text-secondary);">' + t('settings.installedFixes.loading', 'Scanning for installed fixes...') + '</div>';
 
             Millennium.callServerMethod('luatools', 'GetInstalledFixes', { contentScriptQuery: '' })
             .then(function(res) {
@@ -2437,7 +2892,7 @@
 
                 const fixes = Array.isArray(response.fixes) ? response.fixes : [];
                 if (fixes.length === 0) {
-                    container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">' + t('settings.installedFixes.empty', 'No fixes installed yet.') + '</div>';
+                    container.innerHTML = '<div style="padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);text-align:center;">' + t('settings.installedFixes.empty', 'No fixes installed yet.') + '</div>';
                     return;
                 }
 
@@ -2455,9 +2910,9 @@
 
         function createFixListItem(fix, container) {
             const itemEl = document.createElement('div');
-            itemEl.style.cssText = 'margin-bottom:12px;padding:14px;background:rgba(11,20,30,0.8);border:1px solid rgba(102,192,244,0.3);border-radius:6px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s ease;';
-            itemEl.onmouseover = function() { this.style.borderColor = '#66c0f4'; this.style.background = 'rgba(11,20,30,0.95)'; };
-            itemEl.onmouseout = function() { this.style.borderColor = 'rgba(102,192,244,0.3)'; this.style.background = 'rgba(11,20,30,0.8)'; };
+            itemEl.style.cssText = 'margin-bottom:12px;padding:14px;background:var(--lt-bg-container);border:1px solid var(--lt-border);border-radius:6px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s ease;';
+            itemEl.onmouseover = function() { this.style.borderColor = 'var(--lt-accent)'; this.style.background = 'var(--lt-bg-primary)'; };
+            itemEl.onmouseout = function() { this.style.borderColor = 'var(--lt-border)'; this.style.background = 'var(--lt-bg-container)'; };
 
             const infoDiv = document.createElement('div');
             infoDiv.style.cssText = 'flex:1;';
@@ -2472,19 +2927,19 @@
 
             if (fix.fixType) {
                 const typeSpan = document.createElement('div');
-                typeSpan.innerHTML = '<strong style="color:#66c0f4;">' + t('settings.installedFixes.type', 'Type:') + '</strong> ' + fix.fixType;
+                typeSpan.innerHTML = '<strong style="color:var(--lt-accent);">' + t('settings.installedFixes.type', 'Type:') + '</strong> ' + fix.fixType;
                 detailsDiv.appendChild(typeSpan);
             }
 
             if (fix.date) {
                 const dateSpan = document.createElement('div');
-                dateSpan.innerHTML = '<strong style="color:#66c0f4;">' + t('settings.installedFixes.date', 'Installed:') + '</strong> ' + fix.date;
+                dateSpan.innerHTML = '<strong style="color:var(--lt-accent);">' + t('settings.installedFixes.date', 'Installed:') + '</strong> ' + fix.date;
                 detailsDiv.appendChild(dateSpan);
             }
 
             if (fix.filesCount > 0) {
                 const filesSpan = document.createElement('div');
-                filesSpan.innerHTML = '<strong style="color:#66c0f4;">' + t('settings.installedFixes.files', '{count} files').replace('{count}', fix.filesCount) + '</strong>';
+                filesSpan.innerHTML = '<strong style="color:var(--lt-accent);">' + t('settings.installedFixes.files', '{count} files').replace('{count}', fix.filesCount) + '</strong>';
                 detailsDiv.appendChild(filesSpan);
             }
 
@@ -2548,7 +3003,7 @@
                                 itemEl.remove();
                                 // Check if list is now empty
                                 if (container.children.length === 0) {
-                                    container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">No games installed via LuaTools yet.</div>';
+                                    container.innerHTML = '<div style="padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);text-align:center;">No games installed via LuaTools yet.</div>';
                                 }
                             }, 300);
                         })
@@ -2605,7 +3060,7 @@
                             itemEl.remove();
                             // Check if list is now empty
                             if (container.children.length === 0) {
-                                container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">' + t('settings.installedFixes.empty', 'No fixes installed yet.') + '</div>';
+                                container.innerHTML = '<div style="padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);text-align:center;">' + t('settings.installedFixes.empty', 'No fixes installed yet.') + '</div>';
                             }
                         }, 300);
 
@@ -2663,7 +3118,7 @@
         }
 
         function loadInstalledLuaScripts(container) {
-            container.innerHTML = '<div style="padding:14px;text-align:center;color:#c7d5e0;">' + t('settings.installedLua.loading', 'Scanning for installed Lua scripts...') + '</div>';
+            container.innerHTML = '<div style="padding:14px;text-align:center;color:var(--lt-text-secondary);">' + t('settings.installedLua.loading', 'Scanning for installed Lua scripts...') + '</div>';
 
             Millennium.callServerMethod('luatools', 'GetInstalledLuaScripts', { contentScriptQuery: '' })
             .then(function(res) {
@@ -2675,7 +3130,7 @@
 
                 const scripts = Array.isArray(response.scripts) ? response.scripts : [];
                 if (scripts.length === 0) {
-                    container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
+                    container.innerHTML = '<div style="padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
                     return;
                 }
 
@@ -2707,9 +3162,9 @@
 
         function createLuaListItem(script, container) {
             const itemEl = document.createElement('div');
-            itemEl.style.cssText = 'margin-bottom:12px;padding:14px;background:rgba(11,20,30,0.8);border:1px solid rgba(102,192,244,0.3);border-radius:6px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s ease;';
-            itemEl.onmouseover = function() { this.style.borderColor = '#66c0f4'; this.style.background = 'rgba(11,20,30,0.95)'; };
-            itemEl.onmouseout = function() { this.style.borderColor = 'rgba(102,192,244,0.3)'; this.style.background = 'rgba(11,20,30,0.8)'; };
+            itemEl.style.cssText = 'margin-bottom:12px;padding:14px;background:var(--lt-bg-container);border:1px solid var(--lt-border);border-radius:6px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s ease;';
+            itemEl.onmouseover = function() { this.style.borderColor = 'var(--lt-accent)'; this.style.background = 'var(--lt-bg-primary)'; };
+            itemEl.onmouseout = function() { this.style.borderColor = 'var(--lt-border)'; this.style.background = 'var(--lt-bg-container)'; };
 
             const infoDiv = document.createElement('div');
             infoDiv.style.cssText = 'flex:1;';
@@ -2732,7 +3187,7 @@
 
             if (script.modifiedDate) {
                 const dateSpan = document.createElement('div');
-                dateSpan.innerHTML = '<strong style="color:#66c0f4;">' + t('settings.installedLua.modified', 'Modified:') + '</strong> ' + script.modifiedDate;
+                dateSpan.innerHTML = '<strong style="color:var(--lt-accent);">' + t('settings.installedLua.modified', 'Modified:') + '</strong> ' + script.modifiedDate;
                 detailsDiv.appendChild(dateSpan);
             }
 
@@ -2794,7 +3249,7 @@
                                                 itemEl.remove();
                                                 // Check if list is now empty
                                                 if (container.children.length === 0) {
-                                                    container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
+                                                    container.innerHTML = '<div style="padding:14px;background:var(--lt-bg-primary);border:1px solid var(--lt-bg-secondary);border-radius:4px;color:var(--lt-text-secondary);text-align:center;">' + t('settings.installedLua.empty', 'No Lua scripts installed yet.') + '</div>';
                                                 }
                                             }, 300);
                                         })
@@ -2816,10 +3271,10 @@
         }
 
         function handleLoad(force) {
-            setStatus(t('settings.loading', 'Loading settings...'), '#c7d5e0');
+            setStatus(t('settings.loading', 'Loading settings...'), 'var(--lt-text-secondary)');
             saveBtn.dataset.disabled = '1';
             saveBtn.style.opacity = '0.6';
-            contentWrap.innerHTML = '<div style="padding:20px;color:#c7d5e0;">' + t('common.status.loading', 'Loading...') + '</div>';
+            contentWrap.innerHTML = '<div style="padding:20px;color:var(--lt-text-secondary);">' + t('common.status.loading', 'Loading...') + '</div>';
 
             return fetchSettingsConfig(force).then(function(config){
                 state.config = {
@@ -2832,7 +3287,7 @@
                 state.draft = initialiseSettingsDraft(config);
                 applyStaticTranslations();
                 renderSettings();
-                setStatus('', '#c7d5e0');
+                setStatus('', 'var(--lt-text-secondary)');
             }).catch(function(err){
                 const message = err && err.message ? err.message : t('settings.error', 'Failed to load settings.');
                 contentWrap.innerHTML = '<div style="padding:20px;color:#ff5c5c;">' + message + '</div>';
@@ -2871,14 +3326,14 @@
             const changes = collectChanges();
             try { backendLog('LuaTools: collectChanges payload ' + JSON.stringify(changes)); } catch(_) {}
             if (!changes || Object.keys(changes).length === 0) {
-                setStatus(t('settings.noChanges', 'No changes to save.'), '#c7d5e0');
+                setStatus(t('settings.noChanges', 'No changes to save.'), 'var(--lt-text-secondary)');
                 updateSaveState();
                 return;
             }
 
             saveBtn.dataset.busy = '1';
             saveBtn.style.opacity = '0.6';
-            setStatus(t('settings.saving', 'Saving...'), '#c7d5e0');
+            setStatus(t('settings.saving', 'Saving...'), 'var(--lt-text-secondary)');
             saveBtn.style.opacity = '0.6';
 
             const payloadToSend = JSON.parse(JSON.stringify(changes));
@@ -2939,6 +3394,7 @@
                 }
 
                 renderSettings();
+                try { ensureLuaToolsStyles(); } catch(_) {}
                 setStatus(t('settings.saveSuccess', 'Settings saved successfully.'), '#8bc34a');
             }).catch(function(err){
                 const message = err && err.message ? err.message : t('settings.saveError', 'Failed to save settings.');
@@ -2999,14 +3455,14 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:400px;max-width:520px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(102,192,244,0.4);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:400px;max-width:520px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const titleEl = document.createElement('div');
-        titleEl.style.cssText = 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:left;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.style.cssText = 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:left;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         titleEl.textContent = String(title || 'LuaTools');
 
         const messageEl = document.createElement('div');
-        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#c7d5e0;text-align:left;padding:0 8px;';
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:var(--lt-text-secondary);text-align:left;padding:0 8px;';
         messageEl.textContent = String(message || '');
 
         const btnRow = document.createElement('div');
@@ -3065,14 +3521,14 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100001;display:flex;align-items:center;justify-content:center;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:420px;max-width:540px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(102,192,244,0.4);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:420px;max-width:540px;padding:32px 36px;box-shadow:0 20px 60px rgba(0,0,0,.9), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
 
         const titleEl = document.createElement('div');
-        titleEl.style.cssText = 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
+        titleEl.style.cssText = 'font-size:22px;color:#fff;margin-bottom:20px;font-weight:700;text-align:center;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;';
         titleEl.textContent = String(title || 'LuaTools');
 
         const messageEl = document.createElement('div');
-        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#c7d5e0;text-align:center;';
+        messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:var(--lt-text-secondary);text-align:center;';
         messageEl.innerHTML = String(message || lt('Are you sure?'));
 
         const btnRow = document.createElement('div');
@@ -3367,15 +3823,15 @@
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(5px);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s;';
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:450px;padding:25px;box-shadow:0 10px 40px rgba(0,0,0,0.8);';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:450px;padding:25px;box-shadow:0 10px 40px rgba(0,0,0,0.8);';
 
         const title = document.createElement('div');
         title.innerHTML = '<i class="fa-solid fa-download"></i> Workshop Downloader';
-        title.style.cssText = 'font-size: 20px; font-weight: bold; color: #66c0f4; margin-bottom: 15px;';
+        title.style.cssText = 'font-size: 20px; font-weight: bold; color:var(--lt-accent); margin-bottom: 15px;';
 
         const statusText = document.createElement('div');
         statusText.textContent = 'Initializing...';
-        statusText.style.cssText = 'margin-bottom: 10px; color: #c7d5e0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px;';
+        statusText.style.cssText = 'margin-bottom: 10px; color: var(--lt-text-secondary); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px;';
 
         const progressWrap = document.createElement('div');
         progressWrap.style.cssText = 'width: 100%; height: 10px; background: #000; border-radius: 5px; overflow: hidden; margin-bottom: 20px;';
@@ -3415,7 +3871,7 @@
                     clearInterval(poll);
                     statusText.textContent = lt('Download Completed! Opening folder...');
                     progressBar.style.width = '100%';
-                    progressBar.style.background = '#66c0f4';
+                    progressBar.style.background = 'var(--lt-accent)';
 
                     cancelBtn.textContent = lt('Close');
                     cancelBtn.className = 'luatools-btn primary';
@@ -3447,6 +3903,22 @@
 
     // Try to add the button immediately if DOM is ready
     function onFrontendReady() {
+        // Fetch settings on startup to ensure saved theme is applied across pages
+        try {
+            fetchSettingsConfig(true).then(function(cfg) {
+                try {
+                    ensureLuaToolsStyles();
+                } catch (_) {}
+
+                // Show disclaimer after translations are loaded so it displays in the correct language
+                try {
+                    if (localStorage.getItem('luatools millennium disclaimer accepted') !== '1') {
+                        showMillenniumDisclaimerModal();
+                    }
+                } catch (_) {}
+            }).catch(function(_) {});
+        } catch (_) {}
+
         addLuaToolsButton();
         addWorkshopButton();
         // Ask backend if there is a queued startup message from InitApis
@@ -3678,21 +4150,21 @@
         overlay.className = 'luatools-loadedapps-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;';
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:linear-gradient(135deg, #1b2838 0%, #2a475e 100%);color:#fff;border:2px solid #66c0f4;border-radius:8px;min-width:420px;max-width:640px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(102,192,244,0.3);animation:slideUp 0.1s ease-out;';
+        modal.style.cssText = 'background:var(--lt-modal-bg);color:var(--lt-text);border:2px solid var(--lt-accent);border-radius:8px;min-width:420px;max-width:640px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.8), 0 0 0 1px var(--lt-border);animation:slideUp 0.1s ease-out;';
         const title = document.createElement('div');
-        title.style.cssText = 'font-size:24px;color:#fff;margin-bottom:20px;font-weight:700;text-shadow:0 2px 8px rgba(102,192,244,0.4);background:linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;';
+        title.style.cssText = 'font-size:24px;color:#fff;margin-bottom:20px;font-weight:700;text-shadow:0 2px 8px var(--lt-shadow);background:var(--lt-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;';
         title.textContent = lt('LuaTools · Added Games');
         const body = document.createElement('div');
-        body.style.cssText = 'font-size:14px;line-height:1.8;margin-bottom:16px;max-height:320px;overflow:auto;padding:16px;border:1px solid rgba(102,192,244,0.3);border-radius:12px;background:rgba(11,20,30,0.6);';
+        body.style.cssText = 'font-size:14px;line-height:1.8;margin-bottom:16px;max-height:320px;overflow:auto;padding:16px;border:1px solid var(--lt-border);border-radius:12px;background:rgba(11,20,30,0.6);';
         if (apps && apps.length) {
             const list = document.createElement('div');
             apps.forEach(function(item){
                 const a = document.createElement('a');
                 a.href = 'steam://install/' + String(item.appid);
                 a.textContent = String(item.name || item.appid);
-                a.style.cssText = 'display:block;color:#c7d5e0;text-decoration:none;padding:10px 16px;margin-bottom:8px;background:rgba(102,192,244,0.08);border:1px solid rgba(102,192,244,0.2);border-radius:4px;transition:all 0.3s ease;';
-                a.onmouseover = function() { this.style.background = 'rgba(102,192,244,0.2)'; this.style.borderColor = '#66c0f4'; this.style.transform = 'translateX(4px)'; this.style.color = '#fff'; };
-                a.onmouseout = function() { this.style.background = 'rgba(102,192,244,0.08)'; this.style.borderColor = 'rgba(102,192,244,0.2)'; this.style.transform = 'translateX(0)'; this.style.color = '#c7d5e0'; };
+                a.style.cssText = 'display:block;color:var(--lt-text-secondary);text-decoration:none;padding:10px 16px;margin-bottom:8px;background:var(--lt-icon-btn-bg);border:1px solid var(--lt-border);border-radius:4px;transition:all 0.3s ease;';
+                a.onmouseover = function() { this.style.background = 'var(--lt-icon-btn-hover)'; this.style.borderColor = 'var(--lt-accent)'; this.style.transform = 'translateX(4px)'; this.style.color = 'var(--lt-text)'; };
+                a.onmouseout = function() { this.style.background = 'var(--lt-icon-btn-bg)'; this.style.borderColor = 'var(--lt-border)'; this.style.transform = 'translateX(0)'; this.style.color = 'var(--lt-text-secondary)'; };
                 a.onclick = function(e){ e.preventDefault(); try { window.location.href = a.href; } catch(_) {} };
                 a.oncontextmenu = function(e){ e.preventDefault(); const url = 'https://steamdb.info/app/' + String(item.appid) + '/';
                     try { Millennium.callServerMethod('luatools', 'OpenExternalUrl', { url, contentScriptQuery: '' }); } catch(_) {}

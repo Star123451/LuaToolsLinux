@@ -7,7 +7,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from logger import logger
-from paths import backend_path
+from paths import backend_path, get_plugin_dir
 
 from locales import DEFAULT_LOCALE, PLACEHOLDER_VALUE, get_locale_manager
 
@@ -57,6 +57,57 @@ def _ensure_language_valid(values: Dict[str, Any]) -> bool:
     return changed
 
 
+def _available_theme_files() -> List[Dict[str, Any]]:
+    """Return list of available theme choices from themes.json or by scanning the themes dir."""
+    themes = []
+    try:
+        themes_json_path = os.path.join(get_plugin_dir(), "public", "themes", "themes.json")
+        if os.path.exists(themes_json_path):
+            try:
+                with open(themes_json_path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict) and item.get("value"):
+                                themes.append({"value": str(item["value"]), "label": str(item.get("label") or item["value"])})
+            except Exception as exc:
+                logger.warn(f"LuaTools: Failed to parse themes.json: {exc}")
+    except Exception:
+        pass
+
+    if not themes:
+        try:
+            themes_dir = os.path.join(get_plugin_dir(), "public", "themes")
+            if os.path.exists(themes_dir):
+                for filename in os.listdir(themes_dir):
+                    if filename.endswith(".css"):
+                        theme_name = filename[:-4]
+                        themes.append({"value": theme_name, "label": theme_name.capitalize()})
+        except Exception as exc:
+            logger.warn(f"LuaTools: Failed to list theme files: {exc}")
+
+    if not themes:
+        themes = [
+            {"value": "original", "label": "Original"},
+            {"value": "dark", "label": "Dark"},
+            {"value": "light", "label": "Light"},
+            {"value": "forest", "label": "Forest"},
+            {"value": "ocean", "label": "Ocean"},
+            {"value": "purple", "label": "Purple"},
+            {"value": "space", "label": "Space"},
+            {"value": "rosepine", "label": "Rosepine"},
+            {"value": "catppuccin", "label": "Catppuccin"},
+            {"value": "dracula", "label": "Dracula"},
+            {"value": "christmas", "label": "Christmas"},
+        ]
+
+    try:
+        themes.sort(key=lambda x: (x["value"] != "original", x["label"]))
+    except Exception:
+        pass
+    return themes
+
+
 def _inject_locale_choices(schema: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     locale_choices = [
         {
@@ -65,6 +116,8 @@ def _inject_locale_choices(schema: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         }
         for locale in _available_locale_codes()
     ]
+
+    theme_choices = _available_theme_files()
 
     for group in schema:
         if group.get("key") != "general":
@@ -75,6 +128,11 @@ def _inject_locale_choices(schema: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 option["choices"] = locale_choices
                 metadata = option.get("metadata") or {}
                 metadata["dynamicChoices"] = "locales"
+                option["metadata"] = metadata
+            elif option.get("key") == "theme":
+                option["choices"] = theme_choices
+                metadata = option.get("metadata") or {}
+                metadata["dynamicChoices"] = "themes"
                 option["metadata"] = metadata
     return schema
 
@@ -170,6 +228,17 @@ def _validate_option_value(option: SettingOption, value: Any) -> Tuple[bool, Any
             except Exception:
                 pass
             return False, option.default, "Value not in list of allowed options"
+        elif dynamic == "themes":
+            available_themes = _available_theme_files()
+            allowed_values = {str(t["value"]) for t in available_themes if isinstance(t, dict) and t.get("value")}
+            candidate = str(value or "").strip()
+            if candidate in allowed_values:
+                return True, candidate, None
+            try:
+                logger.warn(f"LuaTools: invalid theme selection {value!r}; allowed {sorted(allowed_values)}")
+            except Exception:
+                pass
+            return False, option.default, "Value not in list of allowed themes"
         else:
             allowed = {
                 str(choice.get("value"))
