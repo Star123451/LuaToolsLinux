@@ -311,7 +311,7 @@ def RemoveGameToken(appid: int, contentScriptQuery: str = "") -> str:
                 f.writelines(new_lines)
             os.replace(tmp_path, config_path)
 
-        return json.dumps({"success": True, "message": "Token removido com sucesso."})
+        return json.dumps({"success": True, "message": "Token successfully removed."})
     except Exception as e:
         logger.warn(f"[LuaTools] Erro ao tentar limpar token: {e}")
         return json.dumps({"success": False, "error": str(e)})
@@ -439,7 +439,7 @@ def InstallDependencies(contentScriptQuery: str = "") -> str:
         logger.log(f"[LuaTools] Instalando dependências...")
         subprocess.check_call([venv_python, "-m", "pip", "install", "-r", requirements_file])
 
-        return json.dumps({"success": True, "message": "Dependências instaladas com sucesso!"})
+        return json.dumps({"success": True, "message": "Dependencies installed successfully!"})
 
     except subprocess.CalledProcessError as e:
         logger.error(f"[LuaTools] Falha no PIP: {e}")
@@ -1164,7 +1164,7 @@ def AddGameDLCs(appid: int, contentScriptQuery: str = "") -> str:
             f.writelines(new_lines)
         os.replace(tmp_path, config_path)
 
-        return json.dumps({"success": True, "message": f"{len(dlcs)} DLCs adicionadas com sucesso!"})
+        return json.dumps({"success": True, "message": f"{len(dlcs)} DLCs successfully added!"})
 
     except Exception as e:
         logger.error(f"[LuaTools] Add DLC Error: {e}")
@@ -1441,3 +1441,4 @@ def UninstallGameFull(appid: int, contentScriptQuery: str = "") -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 plugin = Plugin()
+
