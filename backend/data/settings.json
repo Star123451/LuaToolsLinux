@@ -4,6 +4,10 @@
     "general": {
       "language": "en",
       "donateKeys": false
+    },
+    "slssteam": {
+      "playNotOwnedGames": true,
+      "safeMode": false
     }
   }
 }

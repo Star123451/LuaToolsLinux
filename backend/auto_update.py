@@ -321,42 +321,12 @@ def restart_steam_internal() -> bool:
         get_slssteam_install_dir,
     )
 
-    # ── 1. Kill running Steam ────────────────────────────────────────
-    try:
-        # Use -f to match broadly (process may be "steam", "steam.sh", etc.)
-        subprocess.run(["pkill", "-f", "steam"], timeout=5)
-        logger.log("LuaTools: Sent kill signal to Steam")
-    except Exception as exc:
-        logger.warn(f"LuaTools: pkill failed (may already be dead): {exc}")
-
-    # Poll until Steam is actually gone (max 10 seconds)
-    for _ in range(20):
-        result = subprocess.run(["pgrep", "-x", "steam"], capture_output=True)
-        if result.returncode != 0:
-            break
-        time.sleep(0.5)
-    else:
-        logger.warn("LuaTools: Steam did not shut down in time, proceeding anyway")
-
-    time.sleep(1)  # brief extra grace period
-
-    # ── 2. Create steam.cfg to prevent self-update on next launch ──
+    # ── 1. Create a detached launcher script ──────────────────────────────────
+    import tempfile
+    
     steam_root = find_steam_root()
-    if steam_root:
-        steam_cfg = os.path.join(steam_root, "steam.cfg")
-        try:
-            with open(steam_cfg, "w", encoding="utf-8") as f:
-                f.write("BootStrapperInhibitAll=enable\n")
-                f.write("BootStrapperForceSelfUpdate=disable\n")
-            logger.log(f"LuaTools: Created steam.cfg at {steam_cfg}")
-        except Exception as exc:
-            logger.warn(f"LuaTools: Failed to create steam.cfg: {exc}")
-
-    # ── 3. Find Steam executable ──────────────────────────────────
-    # Prefer system `steam` command (respects /usr/local/bin wrappers)
     steam_exe = shutil.which("steam")
 
-    # Fallback to steam.sh in the Steam directory
     if not steam_exe and steam_root:
         steam_sh = os.path.join(steam_root, "steam.sh")
         if os.path.isfile(steam_sh):
@@ -366,24 +336,58 @@ def restart_steam_internal() -> bool:
         logger.error("LuaTools: Could not find Steam executable to restart")
         return False
 
-    # ── 4. Launch Steam with SLSsteam injection ───────────────────
-    try:
-        if check_slssteam_installed():
-            sls_dir = get_slssteam_install_dir()
-            ld_audit = f"{sls_dir}/library-inject.so:{sls_dir}/SLSsteam.so"
-            # Use nohup + env pattern (matches SLSsteam installer exactly)
-            cmd = f'nohup env LD_AUDIT="{ld_audit}" "{steam_exe}" > /dev/null 2>&1 &'
-            logger.log(f"LuaTools: Launching: {cmd}")
-            os.system(cmd)
-        else:
-            cmd = f'nohup "{steam_exe}" > /dev/null 2>&1 &'
-            logger.log(f"LuaTools: Launching (no SLSsteam): {cmd}")
-            os.system(cmd)
+    steam_cmd = f'"{steam_exe}"'
+    if check_slssteam_installed():
+        sls_dir = get_slssteam_install_dir()
+        ld_audit = f"{sls_dir}/library-inject.so:{sls_dir}/SLSsteam.so"
+        steam_cmd = f'env LD_AUDIT="{ld_audit}" {steam_cmd}'
 
-        logger.log("LuaTools: Steam restart launched successfully")
+    script_content = f"""#!/bin/bash
+exec > /tmp/luatools_restart.log 2>&1
+echo "Starting LuaTools restart script..."
+sleep 2
+
+echo "Requesting graceful Steam shutdown..."
+"{steam_exe}" -shutdown || true
+
+echo "Waiting for Steam processes to exit..."
+for i in {{1..20}}; do
+    if ! pgrep -x steam > /dev/null && ! pgrep -x steamwebhelper > /dev/null; then
+        echo "Steam has exited."
+        break
+    fi
+    sleep 0.5
+done
+
+echo "Force killing any remaining Steam processes..."
+pkill -9 -x steam || true
+pkill -9 -x steamwebhelper || true
+sleep 1
+
+# Create steam.cfg to prevent self-update
+if [ -d "{steam_root}" ]; then
+    echo "BootStrapperInhibitAll=enable" > "{steam_root}/steam.cfg"
+    echo "BootStrapperForceSelfUpdate=disable" >> "{steam_root}/steam.cfg"
+fi
+
+echo "Launching Steam..."
+nohup {steam_cmd} > /dev/null 2>&1 &
+echo "Done."
+"""
+
+    try:
+        fd, script_path = tempfile.mkstemp(suffix=".sh", prefix="luatools_restart_")
+        with os.fdopen(fd, 'w') as f:
+            f.write(script_content)
+        
+        os.chmod(script_path, 0o755)
+        
+        # Launch detached
+        subprocess.Popen(["bash", script_path], start_new_session=True)
+        logger.log(f"LuaTools: Launched restart script: {script_path}")
         return True
     except Exception as exc:
-        logger.error(f"LuaTools: Failed to restart Steam: {exc}")
+        logger.error(f"LuaTools: Failed to launch restart script: {exc}")
         return False
 
 

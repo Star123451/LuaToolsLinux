@@ -2937,53 +2937,63 @@
         container.appendChild(btn);
 
         // URL da API e Proxy mais rápido
-        const targetUrl = 'https://www.protondb.com/api/v1/reports/summaries/' + appid + '.json';
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+        // Changed to use LuaTools backend method to bypass CORS
+        try {
+            if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
+                Millennium.callServerMethod('luatools', 'GetProtonDBRating', { appid: appid, contentScriptQuery: '' })
+                .then(function(res) {
+                    const data = typeof res === 'string' ? JSON.parse(res) : res;
+                    if (!data || !data.success) {
+                        throw new Error(data && data.error ? data.error : 'Failed to fetch ProtonDB rating');
+                    }
+                    
+                    let tier = 'pending';
+                    if (data && data.tier) tier = data.tier.toLowerCase();
+                    else if (data && data.confidence) tier = data.confidence.toLowerCase();
 
-        fetch(proxyUrl)
-        .then(res => {
-            if (!res.ok) throw new Error('Falha na API');
-            return res.json();
-        })
-        .then(data => {
-            let tier = 'pending';
-            if (data && data.tier) tier = data.tier.toLowerCase();
-            else if (data && data.confidence) tier = data.confidence.toLowerCase();
+                    // --- AQUI ESTÁ A CORREÇÃO ---
+                    // Verifica se a página da loja tem o ícone do Linux (SteamOS)
+                    // Se tiver, forçamos o status para "NATIVE" para igualar ao site do ProtonDB
+                    const hasLinuxIcon = document.querySelector('.platform_img.linux') ||
+                    document.querySelector('.os_linux'); // fallback para outros layouts
 
-            // --- AQUI ESTÁ A CORREÇÃO ---
-            // Verifica se a página da loja tem o ícone do Linux (SteamOS)
-            // Se tiver, forçamos o status para "NATIVE" para igualar ao site do ProtonDB
-            const hasLinuxIcon = document.querySelector('.platform_img.linux') ||
-            document.querySelector('.os_linux'); // fallback para outros layouts
+                    if (hasLinuxIcon) {
+                        tier = 'native';
+                    }
+                    // -----------------------------
 
-            if (hasLinuxIcon) {
-                tier = 'native';
+                    const bgColor = protonColors[tier] || '#66c0f4';
+                    // Texto branco para Native/Bronze/Borked, Preto para os claros
+                    const textColor = (tier === 'platinum' || tier === 'gold' || tier === 'silver') ? '#000000' : '#FFFFFF';
+
+                    // Formata "native" para "NATIVO" (ou Native)
+                    let tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+                    if (tier === 'native') tierLabel = 'Native'; // Em caixa alta para destacar
+
+                    // Aplica estilos
+                    btn.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -40)} 100%)`;
+                    btn.style.border = `1px solid ${adjustColor(bgColor, -60)}`;
+
+                    span.style.color = textColor;
+                    span.style.fontWeight = 'bold';
+                    span.style.textShadow = 'none';
+                    span.innerHTML = `ProtonDB: ${tierLabel}`;
+                })
+                .catch(function(err) {
+                    console.warn('LuaTools ProtonDB Error:', err);
+                    btn.style.background = '#3a3a3a';
+                    btn.style.opacity = '0.8';
+                    span.innerHTML = '<i class="fa-solid fa-question"></i> ProtonDB';
+                });
+            } else {
+                 throw new Error("Millennium backend unavailable");
             }
-            // -----------------------------
-
-            const bgColor = protonColors[tier] || '#66c0f4';
-            // Texto branco para Native/Bronze/Borked, Preto para os claros
-            const textColor = (tier === 'platinum' || tier === 'gold' || tier === 'silver') ? '#000000' : '#FFFFFF';
-
-            // Formata "native" para "NATIVO" (ou Native)
-            let tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
-            if (tier === 'native') tierLabel = 'Native'; // Em caixa alta para destacar
-
-            // Aplica estilos
-            btn.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -40)} 100%)`;
-            btn.style.border = `1px solid ${adjustColor(bgColor, -60)}`;
-
-            span.style.color = textColor;
-            span.style.fontWeight = 'bold';
-            span.style.textShadow = 'none';
-            span.innerHTML = `ProtonDB: ${tierLabel}`;
-        })
-        .catch((err) => {
+        } catch(err) {
             console.warn('LuaTools ProtonDB Error:', err);
             btn.style.background = '#3a3a3a';
             btn.style.opacity = '0.8';
             span.innerHTML = '<i class="fa-solid fa-question"></i> ProtonDB';
-        });
+        }
     }
 
     function adjustColor(color, amount) {
