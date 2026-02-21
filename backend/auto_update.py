@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import threading
 import time
+import sys
 import zipfile
 from typing import Any, Dict, Optional
 
@@ -16,7 +18,7 @@ from config import (
     UPDATE_PENDING_INFO,
     UPDATE_PENDING_ZIP,
 )
-from http_client import ensure_http_client
+from http_client import ensure_http_client, get_http_client
 from logger import logger
 from paths import backend_path, get_plugin_dir
 from steam_utils import detect_steam_install_path
@@ -28,11 +30,10 @@ from utils import (
 )
 
 _UPDATE_CHECK_THREAD: Optional[threading.Thread] = None
+_AUTO_UPDATE_ENABLED = False  # Set to False to disable background checks
 
 
 def apply_pending_update_if_any() -> str:
-    return "no"
-
     """Extract a pending update zip if present. Returns a message or empty string."""
     pending_zip = backend_path(UPDATE_PENDING_ZIP)
     pending_info = backend_path(UPDATE_PENDING_INFO)
@@ -64,8 +65,6 @@ def apply_pending_update_if_any() -> str:
 
 
 def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    return {}
-
     owner = str(cfg.get("owner", "")).strip()
     repo = str(cfg.get("repo", "")).strip()
     asset_name = str(cfg.get("asset_name", "ltsteamplugin.zip")).strip()
@@ -144,7 +143,6 @@ def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _download_and_extract_update(zip_url: str, pending_zip: str) -> bool:
-    return False  # do not.
     client = ensure_http_client("AutoUpdate: download")
     try:
         logger.log(f"AutoUpdate: Downloading {zip_url} -> {pending_zip}")
@@ -163,9 +161,6 @@ def _download_and_extract_update(zip_url: str, pending_zip: str) -> bool:
 def check_for_update_once() -> str:
     """Check remote manifest (if configured) and download a newer version.
     Returns a message for the user if an update was downloaded/applied."""
-
-    return ""
-
     client = ensure_http_client("AutoUpdate")
     cfg_path = backend_path(UPDATE_CONFIG_FILE)
     cfg = read_json(cfg_path)
@@ -284,23 +279,27 @@ def _check_and_donate_keys() -> None:
 
 def _start_initial_check_worker():
     try:
-        message = check_for_update_once()
-        if message:
-            store_last_message(message)
-            logger.log(
-                f"AutoUpdate: Initial check found update: {message}. Auto-restarting Steam..."
-            )
-            time.sleep(2)
-            restart_steam_internal()
+        if _AUTO_UPDATE_ENABLED:
+            message = check_for_update_once()
+            if message:
+                store_last_message(message)
+                logger.log(
+                    f"AutoUpdate: Initial check found update: {message}. Auto-restarting Steam..."
+                )
+                time.sleep(2)
+                restart_steam_internal()
+            else:
+                _start_periodic_update_checks()
         else:
-            _start_periodic_update_checks()
+             logger.log("AutoUpdate: Background updates disabled.")
 
-        # Check and donate keys after update check completes
+        # Check and donate keys regardless of update status
         _check_and_donate_keys()
     except Exception as exc:
         logger.warn(f"AutoUpdate: background check failed: {exc}")
         try:
-            _start_periodic_update_checks()
+             if _AUTO_UPDATE_ENABLED:
+                _start_periodic_update_checks()
         except Exception:
             pass
 
@@ -311,83 +310,51 @@ def start_auto_update_background_check() -> None:
 
 
 def restart_steam_internal() -> bool:
-    """Internal helper used to restart Steam on Linux with SLSsteam injection."""
-    import shutil
-    import time
-
-    from linux_platform import (
-        check_slssteam_installed,
-        find_steam_root,
-        get_slssteam_install_dir,
-    )
-
-    # ── 1. Create a detached launcher script ──────────────────────────────────
-    import tempfile
-    
-    steam_root = find_steam_root()
-    steam_exe = shutil.which("steam")
-
-    if not steam_exe and steam_root:
-        steam_sh = os.path.join(steam_root, "steam.sh")
-        if os.path.isfile(steam_sh):
-            steam_exe = steam_sh
-
-    if not steam_exe:
-        logger.error("LuaTools: Could not find Steam executable to restart")
-        return False
-
-    steam_cmd = f'"{steam_exe}"'
-    if check_slssteam_installed():
-        sls_dir = get_slssteam_install_dir()
-        ld_audit = f"{sls_dir}/library-inject.so:{sls_dir}/SLSsteam.so"
-        steam_cmd = f'env LD_AUDIT="{ld_audit}" {steam_cmd}'
-
-    script_content = f"""#!/bin/bash
-exec > /tmp/luatools_restart.log 2>&1
-echo "Starting LuaTools restart script..."
-sleep 2
-
-echo "Requesting graceful Steam shutdown..."
-"{steam_exe}" -shutdown || true
-
-echo "Waiting for Steam processes to exit..."
-for i in {{1..20}}; do
-    if ! pgrep -x steam > /dev/null && ! pgrep -x steamwebhelper > /dev/null; then
-        echo "Steam has exited."
-        break
-    fi
-    sleep 0.5
-done
-
-echo "Force killing any remaining Steam processes..."
-pkill -9 -x steam || true
-pkill -9 -x steamwebhelper || true
-sleep 1
-
-# Create steam.cfg to prevent self-update
-if [ -d "{steam_root}" ]; then
-    echo "BootStrapperInhibitAll=enable" > "{steam_root}/steam.cfg"
-    echo "BootStrapperForceSelfUpdate=disable" >> "{steam_root}/steam.cfg"
-fi
-
-echo "Launching Steam..."
-nohup {steam_cmd} > /dev/null 2>&1 &
-echo "Done."
-"""
-
+    """Internal helper used to restart Steam (Windows/Linux support)."""
     try:
-        fd, script_path = tempfile.mkstemp(suffix=".sh", prefix="luatools_restart_")
-        with os.fdopen(fd, 'w') as f:
-            f.write(script_content)
-        
-        os.chmod(script_path, 0o755)
-        
-        # Launch detached
-        subprocess.Popen(["bash", script_path], start_new_session=True)
-        logger.log(f"LuaTools: Launched restart script: {script_path}")
-        return True
+        if sys.platform == "win32":
+            # --- WINDOWS LOGIC ---
+            script_path = backend_path("restart_steam.cmd")
+            if not os.path.exists(script_path):
+                logger.error(f"LuaTools: restart script not found: {script_path}")
+                return False
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen(["cmd", "/C", script_path], creationflags=CREATE_NO_WINDOW)
+            logger.log("LuaTools: Windows restart script launched (hidden)")
+            return True
+        else:
+            # --- LINUX LOGIC (Fire-and-Forget) ---
+            logger.log("LuaTools: Linux detected. Preparing Fire-and-Forget restart...")
+
+            # Tenta achar o wrapper do SLSsteam
+            sls_wrapper = os.path.expanduser("~/.local/share/SLSsteam/path/steam")
+            steam_cmd = "steam"
+
+            if os.path.exists(sls_wrapper):
+                steam_cmd = sls_wrapper
+                logger.log(f"LuaTools: Found SLSsteam wrapper at {steam_cmd}")
+            else:
+                logger.log("LuaTools: Wrapper not found, trying default 'steam' command")
+
+            # Comando Fire-and-Forget:
+            # 1. sleep 1: Dá tempo para a função retornar True para o UI
+            # 2. pkill -9: Mata a steam (e este processo)
+            # 3. sleep 10: Garante que a Steam morreu
+            # 4. nohup ... &: Inicia a nova steam desatrelada do terminal morto
+            full_command = f"sleep 1; pkill -9 steam; sleep 10; nohup {steam_cmd} > /dev/null 2>&1 &"
+
+            subprocess.Popen(
+                ["sh", "-c", full_command],
+                start_new_session=True, # Cria nova sessão (setsid)
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            logger.log(f"LuaTools: Restart sequence initiated: {full_command}")
+            return True
+
     except Exception as exc:
-        logger.error(f"LuaTools: Failed to launch restart script: {exc}")
+        logger.error(f"LuaTools: Failed to restart Steam: {exc}")
         return False
 
 
@@ -399,6 +366,7 @@ def restart_steam() -> bool:
 def check_for_updates_now() -> Dict[str, Any]:
     """Expose a synchronous update check for the frontend."""
     try:
+        # Allow manual checks even if auto-update is disabled
         message = check_for_update_once()
         if message:
             store_last_message(message)

@@ -514,21 +514,35 @@ def _process_and_install_lua(appid: int, zip_path: str) -> None:
 
             # --- CORREÇÃO: Limpar ambiente para evitar conflito Qt6/Steam ---
             clean_env = os.environ.copy()
-            clean_env.pop("LD_LIBRARY_PATH", None) # Remove libs da Steam (corrige erro do Qt6)
-            clean_env.pop("LD_PRELOAD", None)      # Remove overlay do Millennium (corrige spam ld.so)
+            clean_env.pop("LD_LIBRARY_PATH", None) # Remove libs da Steam
+            clean_env.pop("LD_PRELOAD", None)      # Remove overlay do Millennium
             clean_env.pop("STEAM_RUNTIME", None)   # Garante que use libs do sistema
             # -------------------------------------------------------------
 
+            # --- CORREÇÃO DE TRAVAMENTO V2 ---
+            # Removemos start_new_session=True para garantir que os sinais de processo
+            # sejam propagados corretamente no ambiente da Steam/Linux.
+            # Mantemos DEVNULL e o loop de polling para evitar bloqueios de pipe.
             proc = subprocess.Popen([launcher_bin, zip_path],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
                                     text=True,
-                                    env=clean_env) # <--- APLICA O AMBIENTE LIMPO
+                                    env=clean_env)
 
-            stdout, stderr = proc.communicate()
+            # Loop de espera ativa (Polling)
+            while proc.poll() is None:
+                # Verifica se o usuário clicou em Cancelar no LuaTools
+                if _is_download_cancelled(appid):
+                    logger.log("LuaTools: Cancelamento detectado, matando Launcher...")
+                    try:
+                        proc.terminate() # Tenta fechar o launcher
+                        proc.wait(timeout=2)
+                    except:
+                        try: proc.kill()
+                        except: pass
+                    raise RuntimeError("cancelled")
 
-            if stdout: logger.log(f"Launcher Output: {stdout[:200]}...")
-            if stderr: logger.warn(f"Launcher Stderr: {stderr}")
+                time.sleep(0.5) # Espera 0.5s antes de checar novamente
 
             if proc.returncode != 0:
                 logger.warn(f"Launcher terminou com código de erro: {proc.returncode}")
