@@ -20,3 +20,13 @@ Thumbs.db
 
 # Local testing
 test_http_client.py
+
+# auto-generated files
+backend/luatools.log
+backend/appidlogs.txt
+
+# this almost leaked my morrenous api key yall please 😭😭😭
+backend/api.json
+
+backend/temp_dl/
+backend/data/
