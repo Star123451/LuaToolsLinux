@@ -54,14 +54,6 @@ SETTINGS_GROUPS: List[SettingGroup] = [
         description="Options for SLSsteam integration.",
         options=[
             SettingOption(
-                key="playNotOwnedGames",
-                label="Play Not-Owned Games",
-                option_type="toggle",
-                description="Allow launching games you don't own via SLSsteam.",
-                default=True,
-                metadata={"yesLabel": "Yes", "noLabel": "No"},
-            ),
-            SettingOption(
                 key="safeMode",
                 label="Safe Mode",
                 option_type="toggle",
@@ -130,4 +122,5 @@ def merge_defaults_with_values(values: Optional[Dict[str, Any]]) -> Dict[str, An
         merged[group_key] = merged_group
 
     return merged
+
 
