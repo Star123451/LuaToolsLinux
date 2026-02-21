@@ -382,33 +382,39 @@
                             if (exists) {
                                 const doDelete = function() {
                                     try {
-                                        Millennium.callServerMethod('luatools', 'DeleteLuaToolsForApp', { appid, contentScriptQuery: '' }).then(function(){
+                                        Millennium.callServerMethod('luatools', 'UninstallGameFull', { appid, contentScriptQuery: '' }).then(function(res){
                                             try {
                                                 window.__LuaToolsButtonInserted = false;
                                                 window.__LuaToolsPresenceCheckInFlight = false;
                                                 window.__LuaToolsPresenceCheckAppId = undefined;
                                                 addLuaToolsButton();
-                                                const successText = t('menu.remove.success', 'LuaTools removed for this app.');
-                                                ShowLuaToolsAlert('LuaTools', successText);
+                                                ShowLuaToolsAlert('Uninstall Complete', 'The game folder and all its contents were successfully deleted.');
                                             } catch(err) {
                                                 backendLog('LuaTools: post-delete cleanup failed: ' + err);
                                             }
                                         }).catch(function(err){
-                                            const failureText = t('menu.remove.failure', 'Failed to remove LuaTools.');
-                                            const errMsg = (err && err.message) ? err.message : failureText;
-                                            ShowLuaToolsAlert('LuaTools', errMsg);
+                                            const errMsg = (err && err.message) ? err.message : 'Failed to uninstall game.';
+                                            ShowLuaToolsAlert('Error', errMsg);
                                         });
                                     } catch(err) {
                                         backendLog('LuaTools: doDelete failed: ' + err);
                                     }
                                 };
 
+                                // Muda a cor e o nome do botão para alertar o perigo
+                                removeBtn.querySelector('span').textContent = 'Uninstall Game & Data';
                                 removeBtn.style.display = 'flex';
+                                removeBtn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.05) 100%)';
+                                removeBtn.style.borderColor = 'rgba(255,80,80,0.5)';
+
                                 removeBtn.onclick = function(e){
                                     e.preventDefault();
                                     try { overlay.remove(); } catch(_) {}
-                                    const confirmMessage = t('menu.remove.confirm', 'Remove via LuaTools for this game?');
-                                    showLuaToolsConfirm('LuaTools', confirmMessage, function(){
+
+                                    // AVISO AGRESSIVO EM INGLÊS
+                                    const warningHtml = '<div style="color:#ff5c5c; font-size:16px; font-weight:bold; margin-bottom:12px; text-transform:uppercase;"><i class="fa-solid fa-triangle-exclamation"></i> Warning: Full Game Deletion</div><div style="font-size:14px; color:#dfe6f0;">Are you absolutely sure you want to proceed?<br><br>This will <b>permanently delete the entire game folder</b> from your Steam library, including all game files, mods, and fixes.<br><br><i style="color:#ff5c5c;">This action cannot be undone.</i></div>';
+
+                                    showLuaToolsConfirm('DANGER ZONE', warningHtml, function(){
                                         doDelete();
                                     }, function(){
                                         try { showSettingsPopup(); } catch(_) {}
@@ -813,51 +819,36 @@
         // --- BUTTON: FIX CONFIG (TOKEN) ---
         const configFixSection = createFixButton(
             lt('Configuration'),
-                                                 lt('Fix Config Token'),
+                                                 lt('Checking...'), // Texto inicial
                                                  'fa-file-code',
                                                  null,
                                                  function(e) {
                                                      e.preventDefault();
                                                      const btn = this;
+                                                     const isRemove = btn.dataset.action === 'remove';
                                                      const originalContent = btn.innerHTML;
 
                                                      // Visual feedback
-                                                     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Applying...') + '</span>';
+                                                     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
                                                      btn.style.opacity = '0.7';
 
-                                                     Millennium.callServerMethod('luatools', 'AddGameToken', { appid: data.appid, contentScriptQuery: '' })
+                                                     const method = isRemove ? 'RemoveGameToken' : 'AddGameToken';
+
+                                                     Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
                                                      .then(function(res){
                                                          const payload = typeof res === 'string' ? JSON.parse(res) : res;
 
-                                                         // Restore button
                                                          btn.innerHTML = originalContent;
                                                          btn.style.opacity = '1';
 
                                                          if (payload && payload.success) {
-                                                             // Success visual (Green)
-                                                             const originalBg = btn.style.background;
-                                                             const originalBorder = btn.style.borderColor;
-
-                                                             btn.style.background = 'linear-gradient(135deg, rgba(92,156,62,0.4) 0%, rgba(92,156,62,0.2) 100%)';
-                                                             btn.style.borderColor = '#79c754';
-
-                                                             // Close the Fixes menu to show the Confirm dialog clearly
-                                                             try { overlay.remove(); } catch(_) {}
-
-                                                             // Show Restart Confirmation
-                                                             showLuaToolsConfirm(
-                                                                 'Configuration Fix',
-                                                                 (payload.message || 'Token added.') + '\n\nRestart Steam now to apply changes?',
-                                                                                 function() {
-                                                                                     // User clicked Confirm -> Restart Steam
-                                                                                     Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' });
-                                                                                 },
-                                                                                 function() {
-                                                                                     // User clicked Cancel -> Re-open the fixes menu (optional, or just do nothing)
-                                                                                     // showFixesResultsPopup(data, isGameInstalled);
-                                                                                 }
-                                                             );
-
+                                                             if (isRemove) {
+                                                                 setupTokenButtonState(btn, false);
+                                                                 ShowLuaToolsAlert('Configuration', lt('Token removed from config.'));
+                                                             } else {
+                                                                 setupTokenButtonState(btn, true);
+                                                                 ShowLuaToolsAlert('Configuration', payload.message || lt('Token added. Restart Steam to apply.'));
+                                                             }
                                                          } else {
                                                              ShowLuaToolsAlert('Error', payload.error || 'Unknown error');
                                                          }
@@ -869,25 +860,128 @@
                                                      });
                                                  }
         );
+
+        function setupTokenButtonState(btn, exists) {
+            if (exists) {
+                btn.dataset.action = 'remove';
+                btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove Token') + '</span>';
+                btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
+                btn.style.borderColor = 'rgba(255,80,80,0.5)';
+            } else {
+                btn.dataset.action = 'add';
+                btn.innerHTML = '<i class="fa-solid fa-file-code"></i><span>' + lt('Fix Config Token') + '</span>';
+                btn.style.background = '';
+                btn.style.borderColor = '';
+            }
+        }
+
+        // Verifica o estado inicial
+        Millennium.callServerMethod('luatools', 'CheckGameTokenStatus', { appid: data.appid, contentScriptQuery: '' })
+        .then(function(res){
+            const payload = typeof res === 'string' ? JSON.parse(res) : res;
+            const exists = payload && payload.success && payload.exists;
+            const btn = configFixSection.querySelector('a');
+            setupTokenButtonState(btn, exists);
+        });
+
         rightColumn.appendChild(configFixSection);
-        // -------------------------------------
-        // ... (o botão Fix Config Token fica acima deste) ...
+
+        // --- BUTTON: ADD/REMOVE DLCs (SLSsteam) ---
+        const dlcSection = createFixButton(
+            lt('DLC Management'),
+                                           lt('Checking...'), // Texto inicial
+                                           'fa-puzzle-piece', // Ícone de quebra-cabeça para DLC
+                                           null,
+                                           function(e) {
+                                               e.preventDefault();
+                                               const btn = this;
+                                               const isRemove = btn.dataset.action === 'remove';
+
+                                               // Animação de carregamento
+                                               const originalContent = btn.innerHTML;
+                                               btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
+                                               btn.style.opacity = '0.7';
+
+                                               const method = isRemove ? 'RemoveGameDLCs' : 'AddGameDLCs';
+
+                                               Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
+                                               .then(function(res){
+                                                   const payload = typeof res === 'string' ? JSON.parse(res) : res;
+
+                                                   btn.innerHTML = originalContent;
+                                                   btn.style.opacity = '1';
+
+                                                   if (payload && payload.success) {
+                                                       // Sucesso! Inverte o botão
+                                                       if (isRemove) {
+                                                           // Virou ADD
+                                                           setupDlcButtonState(btn, false);
+                                                           ShowLuaToolsAlert('DLCs', lt('DLCs removed from configuration.'));
+                                                       } else {
+                                                           // Virou REMOVE
+                                                           setupDlcButtonState(btn, true);
+                                                           ShowLuaToolsAlert('DLCs', payload.message || lt('DLCs added! Restart Steam to apply.'));
+                                                       }
+                                                   } else {
+                                                       ShowLuaToolsAlert('Error', payload.error || 'Unknown error');
+                                                   }
+                                               })
+                                               .catch(function(err){
+                                                   btn.innerHTML = originalContent;
+                                                   btn.style.opacity = '1';
+                                                   ShowLuaToolsAlert('Error', err);
+                                               });
+                                           }
+        );
+
+        // Função auxiliar para mudar o visual do botão Add/Remove
+        function setupDlcButtonState(btn, exists) {
+            if (exists) {
+                btn.dataset.action = 'remove';
+                btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove DLCs') + '</span>';
+                // Estilo Vermelho para remover
+                btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
+                btn.style.borderColor = 'rgba(255,80,80,0.5)';
+            } else {
+                btn.dataset.action = 'add';
+                btn.innerHTML = '<i class="fa-solid fa-plus"></i><span>' + lt('Unlock DLCs') + '</span>';
+                // Estilo Padrão (Azul/Verde)
+                btn.style.background = '';
+                btn.style.borderColor = '';
+            }
+        }
+
+        // Verifica o estado atual ao abrir o menu
+        Millennium.callServerMethod('luatools', 'CheckGameDLCsStatus', { appid: data.appid, contentScriptQuery: '' })
+        .then(function(res){
+            const payload = typeof res === 'string' ? JSON.parse(res) : res;
+            const exists = payload && payload.success && payload.exists;
+            // Pega o botão "a" dentro da section criada
+            const btn = dlcSection.querySelector('a');
+            setupDlcButtonState(btn, exists);
+        });
+
+        // Adiciona na coluna da direita (ou esquerda, você escolhe)
+        rightColumn.appendChild(dlcSection);
 
         // --- NEW BUTTON: FIX FAKE APPID (480) ---
         const fakeIdSection = createFixButton(
             lt('Online Fix (SLS)'),
-                                              lt('Fix FakeAppId (480)'),
-                                              'fa-gamepad', // Gamepad icon
+                                              lt('Checking...'), // Texto inicial
+                                              'fa-gamepad',
                                               null,
                                               function(e) {
                                                   e.preventDefault();
                                                   const btn = this;
+                                                  const isRemove = btn.dataset.action === 'remove';
                                                   const originalContent = btn.innerHTML;
 
-                                                  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Applying...') + '</span>';
+                                                  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
                                                   btn.style.opacity = '0.7';
 
-                                                  Millennium.callServerMethod('luatools', 'AddFakeAppId', { appid: data.appid, contentScriptQuery: '' })
+                                                  const method = isRemove ? 'RemoveFakeAppId' : 'AddFakeAppId';
+
+                                                  Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
                                                   .then(function(res){
                                                       const payload = typeof res === 'string' ? JSON.parse(res) : res;
 
@@ -895,19 +989,13 @@
                                                       btn.style.opacity = '1';
 
                                                       if (payload && payload.success) {
-                                                          const originalBg = btn.style.background;
-                                                          const originalBorder = btn.style.borderColor;
-
-                                                          // Green feedback
-                                                          btn.style.background = 'linear-gradient(135deg, rgba(92,156,62,0.4) 0%, rgba(92,156,62,0.2) 100%)';
-                                                          btn.style.borderColor = '#79c754';
-
-                                                          try { overlay.remove(); } catch(_) {}
-
-                                                          ShowLuaToolsAlert(
-                                                              'Configuration Fix',
-                                                              (payload.message || 'FakeAppId added.') + '\n\nPlease restart Steam to apply changes.'
-                                                          );
+                                                          if (isRemove) {
+                                                              setupFakeIdButtonState(btn, false);
+                                                              ShowLuaToolsAlert('Online Fix', lt('FakeAppId removed from config.'));
+                                                          } else {
+                                                              setupFakeIdButtonState(btn, true);
+                                                              ShowLuaToolsAlert('Online Fix', payload.message || lt('FakeAppId added. Restart Steam to apply.'));
+                                                          }
                                                       } else {
                                                           ShowLuaToolsAlert('Error', payload.error || 'Unknown error');
                                                       }
@@ -919,6 +1007,30 @@
                                                   });
                                               }
         );
+
+        function setupFakeIdButtonState(btn, exists) {
+            if (exists) {
+                btn.dataset.action = 'remove';
+                btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove FakeAppId') + '</span>';
+                btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
+                btn.style.borderColor = 'rgba(255,80,80,0.5)';
+            } else {
+                btn.dataset.action = 'add';
+                btn.innerHTML = '<i class="fa-solid fa-gamepad"></i><span>' + lt('Fix FakeAppId (480)') + '</span>';
+                btn.style.background = '';
+                btn.style.borderColor = '';
+            }
+        }
+
+        // Verifica o estado inicial
+        Millennium.callServerMethod('luatools', 'CheckFakeAppIdStatus', { appid: data.appid, contentScriptQuery: '' })
+        .then(function(res){
+            const payload = typeof res === 'string' ? JSON.parse(res) : res;
+            const exists = payload && payload.success && payload.exists;
+            const btn = fakeIdSection.querySelector('a');
+            setupFakeIdButtonState(btn, exists);
+        });
+
         rightColumn.appendChild(fakeIdSection);
         // ----------------------------------------
         // -----------------------------
@@ -967,6 +1079,60 @@
         gameHeader.appendChild(gameIcon);
         gameHeader.appendChild(gameName);
         contentContainer.appendChild(gameHeader);
+
+        // --- INÍCIO: WIDGET DE STATUS DO ACCELA ---
+        const accelaContainer = document.createElement('div');
+        accelaContainer.style.cssText = 'margin-bottom: 16px; padding: 10px 14px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(102, 192, 244, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; transition: all 0.3s ease;';
+
+        accelaContainer.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+        <div id="accela-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: #8f98a0; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>
+        <div style="display: flex; flex-direction: column;">
+        <span style="font-size: 10px; color: #66c0f4; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">ACCELA STATUS</span>
+        <span id="accela-status-text" style="font-size: 13px; color: #c7d5e0; font-weight: 500;">Checking version...</span>
+        </div>
+        </div>
+        `;
+
+        // Adiciona o container na interface visual
+        contentContainer.appendChild(accelaContainer);
+
+        // Chama o backend Python (CheckGameUpdate) que criamos no main.py
+        if (typeof Millennium !== 'undefined') {
+            Millennium.callServerMethod('luatools', 'CheckGameUpdate', { appid: data.appid, contentScriptQuery: '' })
+            .then(function(res) {
+                const payload = typeof res === 'string' ? JSON.parse(res) : res;
+
+                const dot = accelaContainer.querySelector('#accela-dot');
+                const text = accelaContainer.querySelector('#accela-status-text');
+
+                if (payload && payload.status) {
+                    text.innerText = payload.status;
+
+                    // Aplica cores dinâmicas vindas do Python ou definidas aqui
+                    if (payload.color) {
+                        dot.style.backgroundColor = payload.color;
+                        dot.style.boxShadow = '0 0 8px ' + payload.color;
+                        text.style.color = payload.color;
+                    }
+
+                    // Efeito visual extra se tiver atualização
+                    if (payload.status === "Update Available") {
+                        accelaContainer.style.background = 'rgba(0, 255, 0, 0.05)';
+                        accelaContainer.style.border = '1px solid rgba(0, 255, 0, 0.3)';
+                        text.innerHTML = '<i class="fa-solid fa-download"></i> UPDATE AVAILABLE';
+                        text.style.fontWeight = 'bold';
+                        text.style.textShadow = '0 0 10px rgba(0,255,0,0.3)';
+                    }
+                }
+            })
+            .catch(function(err) {
+                console.warn("[LuaTools] CheckGameUpdate failed", err);
+                const text = accelaContainer.querySelector('#accela-status-text');
+                if(text) text.innerText = "Check Failed";
+            });
+        }
+        // --- FIM: WIDGET DE STATUS DO ACCELA ---
 
         if (!isGameInstalled) {
             const notInstalledWarning = document.createElement('div');
@@ -1874,7 +2040,78 @@
 
             contentWrap.appendChild(sectionEl);
         }
+        function renderSLSsteamSection() {
+            const sectionEl = document.createElement('div');
+            // Estilo que contrasta levemente com o roxo do launcher e o azul do workshop
+            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:linear-gradient(135deg, rgba(60, 50, 20, 0.8) 0%, rgba(40, 30, 10, 0.8) 100%);border:2px solid rgba(255, 215, 0, 0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
 
+            const title = document.createElement('div');
+            title.style.cssText = 'font-size:18px;color:#ffd700;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
+            title.innerHTML = '<i class="fa-solid fa-gears" style="margin-right:10px;"></i> SLSsteam Engine Core';
+            sectionEl.appendChild(title);
+
+            const group = document.createElement('div');
+            group.style.cssText = 'display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,0.2); padding:15px; border-radius:10px;';
+
+            const labelInfo = document.createElement('div');
+            labelInfo.innerHTML = '<div style="font-weight:600; color:#fff;">Play Not Owned Games</div><div style="font-size:12px; color:#a9b2c3;">Toggle bypass for unowned titles in config.yaml</div>';
+
+            // Botões no estilo padrão da Steam (iguais aos do Donate Keys)
+            const toggleWrap = document.createElement('div');
+            toggleWrap.style.cssText = 'display:flex;gap:10px;';
+
+            const yesBtn = document.createElement('a');
+            yesBtn.className = 'btnv6_blue_hoverfade btn_small';
+            yesBtn.href = '#';
+            yesBtn.innerHTML = '<span>Yes</span>';
+
+            const noBtn = document.createElement('a');
+            noBtn.className = 'btnv6_blue_hoverfade btn_small';
+            noBtn.href = '#';
+            noBtn.innerHTML = '<span>No</span>';
+
+            function updateUI(isYes) {
+                if (isYes) {
+                    yesBtn.style.background = '#66c0f4';
+                    yesBtn.querySelector('span').style.color = '#0b141e';
+                    noBtn.style.background = '';
+                    noBtn.querySelector('span').style.color = '';
+                } else {
+                    noBtn.style.background = '#66c0f4';
+                    noBtn.querySelector('span').style.color = '#0b141e';
+                    yesBtn.style.background = '';
+                    yesBtn.querySelector('span').style.color = '';
+                }
+            }
+
+            // Ação imediata no clique
+            yesBtn.onclick = function(e) {
+                e.preventDefault();
+                updateUI(true);
+                Millennium.callServerMethod('luatools', 'SetSLSPlayStatus', { enabled: true });
+            };
+
+            noBtn.onclick = function(e) {
+                e.preventDefault();
+                updateUI(false);
+                Millennium.callServerMethod('luatools', 'SetSLSPlayStatus', { enabled: false });
+            };
+
+            // Puxar status atual
+            Millennium.callServerMethod('luatools', 'GetSLSPlayStatus', {}).then(res => {
+                try {
+                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                    updateUI(payload.enabled);
+                } catch(err) {}
+            });
+
+            toggleWrap.appendChild(yesBtn);
+            toggleWrap.appendChild(noBtn);
+            group.appendChild(labelInfo);
+            group.appendChild(toggleWrap);
+            sectionEl.appendChild(group);
+            contentWrap.appendChild(sectionEl);
+        }
         // --- NEW FUNCTION: Render Launcher Section ---
         function renderLauncherSection() {
             const sectionEl = document.createElement('div');
@@ -1882,7 +2119,9 @@
 
             const title = document.createElement('div');
             title.style.cssText = 'font-size:18px;color:#d4b3ff;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
-            title.innerHTML = '<i class="fa-solid fa-rocket" style="margin-right:10px;"></i>' + t('settings.launcher.title', 'External Launcher (ACCELA/Bifrost & Etc)');
+
+            // MUDANÇA 1: Título limpo apenas com ACCELA
+            title.innerHTML = '<i class="fa-solid fa-rocket" style="margin-right:10px;"></i>' + t('settings.launcher.title', 'EXTERNAL LAUNCHER (ACCELA)');
             sectionEl.appendChild(title);
 
             const group = document.createElement('div');
@@ -1892,16 +2131,16 @@
             label.className = 'luatools-input-label';
             label.textContent = t('settings.launcher.path', 'Launcher Executable Path');
 
-            // Container para input + botão de pasta
             const inputContainer = document.createElement('div');
             inputContainer.style.cssText = 'display:flex; gap:8px; width:100%;';
 
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'luatools-input';
-            input.placeholder = '/home/deck/.local/share/Bifrost/bin/Bifrost';
-            input.style.flex = '1'; // Ocupa o espaço restante
 
+            // MUDANÇA 2: Placeholder corrigido (embora no seu código já parecesse estar certo)
+            input.placeholder = '/home/deck/.local/share/ACCELA/run.sh';
+            input.style.flex = '1';
             // Botão de Procurar (Pasta)
             const browseBtn = document.createElement('a');
             browseBtn.className = 'luatools-btn';
@@ -2147,6 +2386,7 @@
             }
 
             // === INSERT NEW API SECTION HERE ===
+            renderSLSsteamSection();
             renderLauncherSection(); // <--- INSERTED HERE
             renderWorkshopSection();
             renderApiManagementSection();
@@ -2275,46 +2515,56 @@
                 e.preventDefault();
                 if (deleteBtn.dataset.busy === '1') return;
 
+                const warningHtml = '<div style="color:#ff5c5c; font-size:16px; font-weight:bold; margin-bottom:12px; text-transform:uppercase;"><i class="fa-solid fa-triangle-exclamation"></i> Warning: Full Game Deletion</div><div style="font-size:14px; color:#dfe6f0;">Are you absolutely sure you want to proceed?<br><br>This will <b>permanently delete the entire game folder</b> from your Steam library.<br><br><i style="color:#ff5c5c;">This action cannot be undone.</i></div>';
+
                 showLuaToolsConfirm(
-                    fix.gameName || 'LuaTools',
-                    t('settings.installedFixes.deleteConfirm', 'Are you sure you want to remove this fix? This will delete fix files and run Steam verification.'),
-                                    function() {
-                                        // User confirmed
-                                        deleteBtn.dataset.busy = '1';
-                                        deleteBtn.style.opacity = '0.6';
-                                        deleteBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                    'DANGER ZONE',
+                    warningHtml,
+                    function() {
+                        // User confirmed
+                        deleteBtn.dataset.busy = '1';
+                        deleteBtn.style.opacity = '0.6';
+                        deleteBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
-                                        Millennium.callServerMethod('luatools', 'UnFixGame', {
-                                            appid: fix.appid,
-                                            installPath: fix.installPath || '',
-                                            fixDate: fix.date || '',
-                                            contentScriptQuery: ''
-                                        })
-                                        .then(function(res) {
-                                            const response = typeof res === 'string' ? JSON.parse(res) : res;
-                                            if (!response || !response.success) {
-                                                alert(t('settings.installedFixes.deleteError', 'Failed to remove fix.'));
-                                                deleteBtn.dataset.busy = '0';
-                                                deleteBtn.style.opacity = '1';
-                                                deleteBtn.innerHTML = '<span><i class="fa-solid fa-trash"></i> ' + t('settings.installedFixes.delete', 'Delete') + '</span>';
-                                                return;
-                                            }
+                        Millennium.callServerMethod('luatools', 'UninstallGameFull', {
+                            appid: script.appid,
+                            contentScriptQuery: ''
+                        })
+                        .then(function(res) {
+                            const response = typeof res === 'string' ? JSON.parse(res) : res;
+                            if (!response || !response.success) {
+                                alert(t('settings.installedLua.deleteError', 'Failed to remove game.'));
+                                deleteBtn.dataset.busy = '0';
+                                deleteBtn.style.opacity = '1';
+                                deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                                return;
+                            }
 
-                                            // Poll for unfix status
-                                            pollUnfixStatus(fix.appid, itemEl, deleteBtn, container);
-                                        })
-                                        .catch(function(err) {
-                                            alert(t('settings.installedFixes.deleteError', 'Failed to remove fix.') + ' ' + (err && err.message ? err.message : ''));
-                                            deleteBtn.dataset.busy = '0';
-                                            deleteBtn.style.opacity = '1';
-                                            deleteBtn.innerHTML = '<span><i class="fa-solid fa-trash"></i> ' + t('settings.installedFixes.delete', 'Delete') + '</span>';
-                                        });
-                                    },
-                                    function() {
-                                        // User cancelled - do nothing
-                                    }
+                            // Success - remove item from list with animation
+                            itemEl.style.transition = 'all 0.3s ease';
+                            itemEl.style.opacity = '0';
+                            itemEl.style.transform = 'translateX(-20px)';
+                            setTimeout(function() {
+                                itemEl.remove();
+                                // Check if list is now empty
+                                if (container.children.length === 0) {
+                                    container.innerHTML = '<div style="padding:14px;background:#102039;border:1px solid #2a475e;border-radius:4px;color:#c7d5e0;text-align:center;">No games installed via LuaTools yet.</div>';
+                                }
+                            }, 300);
+                        })
+                        .catch(function(err) {
+                            alert(t('settings.installedLua.deleteError', 'Failed to remove game.') + ' ' + (err && err.message ? err.message : ''));
+                            deleteBtn.dataset.busy = '0';
+                            deleteBtn.style.opacity = '1';
+                            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                        });
+                    },
+                    function() {
+                        // User cancelled - do nothing
+                    }
                 );
             });
+
 
             itemEl.appendChild(deleteBtn);
             return itemEl;
@@ -2823,7 +3073,7 @@
 
         const messageEl = document.createElement('div');
         messageEl.style.cssText = 'font-size:15px;line-height:1.6;margin-bottom:28px;color:#c7d5e0;text-align:center;';
-        messageEl.textContent = String(message || lt('Are you sure?'));
+        messageEl.innerHTML = String(message || lt('Are you sure?'));
 
         const btnRow = document.createElement('div');
         btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
@@ -2924,76 +3174,97 @@
     function addProtonDBButton(appid, container) {
         if (!container || document.querySelector('.luatools-proton-btn')) return;
 
-        // Cria o botão
+        // 1. Cria o botão base
         const btn = document.createElement('a');
         btn.className = 'btnv6_blue_hoverfade btn_medium luatools-proton-btn';
         btn.href = 'https://www.protondb.com/app/' + appid;
         btn.target = '_blank';
-        btn.style.cssText = 'margin-left: 6px; transition: all 0.2s ease; text-decoration: none;';
+        btn.style.cssText = 'margin-left: 6px; transition: all 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; vertical-align: bottom;';
 
         const span = document.createElement('span');
         span.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ProtonDB';
         btn.appendChild(span);
         container.appendChild(btn);
 
-        // URL da API e Proxy mais rápido
-        // Changed to use LuaTools backend method to bypass CORS
-        try {
-            if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                Millennium.callServerMethod('luatools', 'GetProtonDBRating', { appid: appid, contentScriptQuery: '' })
-                .then(function(res) {
-                    const data = typeof res === 'string' ? JSON.parse(res) : res;
-                    if (!data || !data.success) {
-                        throw new Error(data && data.error ? data.error : 'Failed to fetch ProtonDB rating');
-                    }
-                    
-                    let tier = 'pending';
-                    if (data && data.tier) tier = data.tier.toLowerCase();
-                    else if (data && data.confidence) tier = data.confidence.toLowerCase();
+        // Variável de Bloqueio (Prioridade Visual)
+        let isNativeLocked = false;
 
-                    // --- AQUI ESTÁ A CORREÇÃO ---
-                    // Verifica se a página da loja tem o ícone do Linux (SteamOS)
-                    // Se tiver, forçamos o status para "NATIVE" para igualar ao site do ProtonDB
-                    const hasLinuxIcon = document.querySelector('.platform_img.linux') ||
-                    document.querySelector('.os_linux'); // fallback para outros layouts
+        // --- FUNÇÃO DE ESTILO ---
+        const applyStyle = (tier, labelText) => {
+            const safeTier = tier ? tier.toLowerCase() : 'pending';
+            const bgColor = safeTier === 'native' ? '#00AD00' : (protonColors[safeTier] || '#66c0f4');
 
-                    if (hasLinuxIcon) {
-                        tier = 'native';
-                    }
-                    // -----------------------------
+            const isLight = ['platinum', 'gold', 'silver'].includes(safeTier);
+            const textColor = (safeTier === 'native' || isLight) ? (safeTier === 'native' ? '#FFFFFF' : '#000000') : '#FFFFFF';
 
-                    const bgColor = protonColors[tier] || '#66c0f4';
-                    // Texto branco para Native/Bronze/Borked, Preto para os claros
-                    const textColor = (tier === 'platinum' || tier === 'gold' || tier === 'silver') ? '#000000' : '#FFFFFF';
+            btn.style.setProperty('background', `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -40)} 100%)`, 'important');
+            btn.style.setProperty('border', `1px solid ${adjustColor(bgColor, -60)}`, 'important');
+            btn.style.setProperty('box-shadow', `0 2px 8px ${bgColor}66`, 'important');
+            btn.style.setProperty('opacity', '1', 'important');
 
-                    // Formata "native" para "NATIVO" (ou Native)
-                    let tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
-                    if (tier === 'native') tierLabel = 'Native'; // Em caixa alta para destacar
+            span.style.setProperty('color', textColor, 'important');
+            span.style.setProperty('font-weight', '800', 'important');
+            span.style.setProperty('text-shadow', 'none', 'important');
+            span.innerHTML = `ProtonDB: ${labelText}`;
+        };
 
-                    // Aplica estilos
-                    btn.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -40)} 100%)`;
-                    btn.style.border = `1px solid ${adjustColor(bgColor, -60)}`;
-
-                    span.style.color = textColor;
-                    span.style.fontWeight = 'bold';
-                    span.style.textShadow = 'none';
-                    span.innerHTML = `ProtonDB: ${tierLabel}`;
-                })
-                .catch(function(err) {
-                    console.warn('LuaTools ProtonDB Error:', err);
-                    btn.style.background = '#3a3a3a';
-                    btn.style.opacity = '0.8';
-                    span.innerHTML = '<i class="fa-solid fa-question"></i> ProtonDB';
-                });
-            } else {
-                 throw new Error("Millennium backend unavailable");
+        // --- 2. DETETIVE VISUAL (Instantâneo para Nativos) ---
+        const checkForNative = () => {
+            // Ícones
+            if (document.querySelector('.platform_img.linux, .os_linux, .platform_img.linux_native, .svg_linux')) return true;
+            // Texto nas abas
+            const tabs = document.querySelectorAll('.sysreq_tab');
+            for (let i = 0; i < tabs.length; i++) {
+                const txt = tabs[i].textContent.toLowerCase();
+                if (txt.includes('linux') || txt.includes('steamos')) return true;
             }
-        } catch(err) {
-            console.warn('LuaTools ProtonDB Error:', err);
-            btn.style.background = '#3a3a3a';
-            btn.style.opacity = '0.8';
-            span.innerHTML = '<i class="fa-solid fa-question"></i> ProtonDB';
-        }
+            return false;
+        };
+
+        // Loop Visual Rápido
+        const checkInt = setInterval(() => {
+            if (checkForNative()) {
+                isNativeLocked = true;
+                applyStyle('native', 'NATIVE');
+                clearInterval(checkInt);
+            }
+        }, 50);
+        setTimeout(() => clearInterval(checkInt), 2500);
+
+        // --- 3. REQUISIÇÃO VIA PYTHON (Back-end) ---
+        // Chama a função nova que criamos no main.py
+        Millennium.callServerMethod('luatools', 'GetProtonDBStatus', { appid: appid, contentScriptQuery: '' })
+        .then(res => {
+            // Se o visual já ganhou, ignora o backend
+            if (isNativeLocked) return;
+
+            const response = typeof res === 'string' ? JSON.parse(res) : res;
+
+            if (response && response.success && response.data) {
+                const data = response.data;
+                let tier = 'pending';
+                if (data.tier) tier = data.tier.toLowerCase();
+                else if (data.confidence) tier = data.confidence.toLowerCase();
+
+                applyStyle(tier, tier.toUpperCase());
+            } else {
+                throw new Error('Backend error');
+            }
+        })
+        .catch((err) => {
+            // Se falhou e não é nativo
+            if (!isNativeLocked) {
+                if (checkForNative()) {
+                    isNativeLocked = true;
+                    applyStyle('native', 'NATIVE');
+                } else {
+                    console.warn('ProtonDB Backend Fail:', err);
+                    btn.style.setProperty('background', '#3a3a3a', 'important');
+                    btn.style.setProperty('opacity', '0.8', 'important');
+                    span.innerHTML = '<i class="fa-solid fa-circle-question"></i> ProtonDB';
+                }
+            }
+        });
     }
 
     function adjustColor(color, amount) {
@@ -3171,264 +3442,8 @@
 
     // AQUI EM BAIXO DEVE ESTAR A LINHA ORIGINAL:
     // function addLuaToolsButton() { ...
-    function addLuaToolsButton() {
-        // Track current URL to detect page changes
-        const currentUrl = window.location.href;
-        if (window.__LuaToolsLastUrl !== currentUrl) {
-            window.__LuaToolsLastUrl = currentUrl;
-            window.__LuaToolsButtonInserted = false;
-            window.__LuaToolsRestartInserted = false;
-            window.__LuaToolsIconInserted = false;
-            window.__LuaToolsPresenceCheckInFlight = false;
-            window.__LuaToolsPresenceCheckAppId = undefined;
 
-            ensureTranslationsLoaded(false).then(function() {
-                updateButtonTranslations();
-                addLuaToolsButton();
-                addWorkshopButton();
-            });
-        }
-
-        const steamdbContainer = document.querySelector('.steamdb-buttons') ||
-        document.querySelector('[data-steamdb-buttons]') ||
-        document.querySelector('.apphub_OtherSiteInfo');
-
-        if (steamdbContainer) {
-
-            // --- PROTONDB LOGIC ---
-            try {
-                const matchProton = window.location.href.match(/app\/(\d+)/);
-                const currentAppId = matchProton ? parseInt(matchProton[1], 10) : NaN;
-                if (!isNaN(currentAppId)) {
-                    addProtonDBButton(currentAppId, steamdbContainer);
-                }
-            } catch(e) { console.log('ProtonDB Error', e); }
-
-            const existingBtn = document.querySelector('.luatools-button');
-            if (existingBtn) {
-                ensureTranslationsLoaded(false).then(function() {
-                    updateButtonTranslations();
-                });
-            }
-
-            // SE JÁ EXISTE O BOTÃO, PARA TUDO. ISSO EVITA DUPLICAÇÃO.
-            if (existingBtn || window.__LuaToolsButtonInserted) {
-                if (!logState.existsOnce) { backendLog('LuaTools button already exists, skipping'); logState.existsOnce = true; }
-                return;
-            }
-
-            // --- RESTART BUTTON LOGIC ---
-            try {
-                if (!document.querySelector('.luatools-restart-button') && !window.__LuaToolsRestartInserted) {
-                    ensureStyles();
-                    ensureLuaToolsStyles();
-                    const referenceBtn = steamdbContainer.querySelector('a');
-                    const restartBtn = document.createElement('a');
-                    if (referenceBtn && referenceBtn.className) {
-                        restartBtn.className = referenceBtn.className + ' luatools-restart-button';
-                    } else {
-                        restartBtn.className = 'btnv6_blue_hoverfade btn_medium luatools-restart-button';
-                    }
-                    restartBtn.href = '#';
-                    const restartText = lt('Restart Steam');
-                    restartBtn.title = restartText;
-                    restartBtn.setAttribute('data-tooltip-text', restartText);
-                    const rspan = document.createElement('span');
-                    rspan.textContent = restartText;
-                    restartBtn.appendChild(rspan);
-
-                    try {
-                        if (referenceBtn) {
-                            const cs = window.getComputedStyle(referenceBtn);
-                            restartBtn.style.marginLeft = cs.marginLeft;
-                            restartBtn.style.marginRight = cs.marginRight;
-                        }
-                    } catch(_) {}
-
-                    restartBtn.addEventListener('click', function(e){
-                        e.preventDefault();
-                        try {
-                            closeSettingsOverlay();
-                            showLuaToolsConfirm('LuaTools', lt('Restart Steam now?'),
-                                                function() { try { Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' }); } catch(_) {} },
-                                                function() { }
-                            );
-                        } catch(_) {}
-                    });
-
-                    if (referenceBtn && referenceBtn.parentElement) {
-                        referenceBtn.after(restartBtn);
-                    } else {
-                        steamdbContainer.appendChild(restartBtn);
-                    }
-
-                    // --- ICON BUTTON LOGIC ---
-                    try {
-                        if (!document.querySelector('.luatools-icon-button') && !window.__LuaToolsIconInserted) {
-                            const iconBtn = document.createElement('a');
-                            if (referenceBtn && referenceBtn.className) {
-                                iconBtn.className = referenceBtn.className + ' luatools-icon-button';
-                            } else {
-                                iconBtn.className = 'btnv6_blue_hoverfade btn_medium luatools-icon-button';
-                            }
-                            iconBtn.href = '#';
-                            iconBtn.title = 'LuaTools Helper';
-                            iconBtn.setAttribute('data-tooltip-text', 'LuaTools Helper');
-                            try {
-                                if (referenceBtn) {
-                                    const cs = window.getComputedStyle(referenceBtn);
-                                    iconBtn.style.marginLeft = cs.marginLeft;
-                                    iconBtn.style.marginRight = cs.marginRight;
-                                }
-                            } catch(_) {}
-                            const ispan = document.createElement('span');
-                            const img = document.createElement('img');
-                            img.alt = '';
-                            img.style.height = '16px';
-                            img.style.width = '16px';
-                            img.style.verticalAlign = 'middle';
-
-                            try {
-                                Millennium.callServerMethod('luatools', 'GetIconDataUrl', { contentScriptQuery: '' }).then(function(res){
-                                    try {
-                                        const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                                        if (payload && payload.success && payload.dataUrl) {
-                                            img.src = payload.dataUrl;
-                                        } else {
-                                            img.src = 'LuaTools/luatools-icon.png';
-                                        }
-                                    } catch(_) { img.src = 'LuaTools/luatools-icon.png'; }
-                                });
-                            } catch(_) {
-                                img.src = 'LuaTools/luatools-icon.png';
-                            }
-
-                            img.onerror = function(){
-                                ispan.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm9.94 3.06l-2.12-.35a7.962 7.962 0 00-1.02-2.46l1.29-1.72a.75.75 0 00-.09-.97l-1.41-1.41a.75.75 0 00-.97-.09l-1.72 1.29c-.77-.44-1.6-.78-2.46-1.02L13.06 2.06A.75.75 0 0012.31 2h-1.62a.75.75 0 00-.75.65l-.35 2.12a7.962 7.962 0 00-2.46 1.02L5 4.6a.75.75 0 00-.97.09L2.62 6.1a.75.75 0 00-.09.97l1.29 1.72c-.44.77-.78 1.6-1.02 2.46l-2.12.35a.75.75 0 00-.65.75v1.62c0 .37.27.69.63.75l2.14.36c.24.86.58 1.69 1.02 2.46L2.53 18a.75.75 0 00.09.97l1.41 1.41c.26.26.67.29.97.09l1.72-1.29c.77.44 1.6.78 2.46 1.02l.35 2.12c.06.36.38.63.75.63h1.62c.37 0 .69-.27.75-.63l.36-2.14c.86-.24 1.69-.58 2.46-1.02l1.72 1.29c.3.2.71.17.97-.09l1.41-1.41c.26-.26.29-.67.09-.97l-1.29-1.72c.44-.77.78-1.6 1.02-2.46l2.12-.35c.36-.06.63-.38.63-.75v-1.62a.75.75 0 00-.65-.75z"/></svg>';
-                            };
-                            ispan.appendChild(img);
-                            iconBtn.appendChild(ispan);
-                            iconBtn.addEventListener('click', function(e){ e.preventDefault(); showSettingsPopup(); });
-                            restartBtn.after(iconBtn);
-                            window.__LuaToolsIconInserted = true;
-                            backendLog('Inserted Icon button');
-                        }
-                    } catch(_) {}
-                    window.__LuaToolsRestartInserted = true;
-                    backendLog('Inserted Restart Steam button');
-                }
-            } catch(_) {}
-
-            if (document.querySelector('.luatools-button') || window.__LuaToolsButtonInserted) {
-                return;
-            }
-
-            // --- MAIN BUTTON WRAPPER CREATION ---
-            // Cria um container vertical para segurar o Status Pill (em cima) e o Botão (em baixo)
-            const mainWrapper = document.createElement('div');
-            mainWrapper.id = 'luatools-main-wrapper';
-            mainWrapper.style.cssText = 'display: inline-flex; flex-direction: column; justify-content: flex-end; vertical-align: bottom; margin-left: 5px;';
-
-            // Create the LuaTools button
-            let referenceBtn = steamdbContainer.querySelector('a');
-            const luatoolsButton = document.createElement('a');
-            luatoolsButton.href = '#';
-
-            if (referenceBtn && referenceBtn.className) {
-                luatoolsButton.className = referenceBtn.className + ' luatools-button';
-            } else {
-                luatoolsButton.className = 'btnv6_blue_hoverfade btn_medium luatools-button';
-            }
-            // Remove margins do botão pois o wrapper controla o espaçamento
-            luatoolsButton.style.marginLeft = '0';
-            luatoolsButton.style.marginRight = '0';
-            luatoolsButton.style.width = '100%';
-            luatoolsButton.style.boxSizing = 'border-box';
-            luatoolsButton.style.textAlign = 'center';
-
-            const span = document.createElement('span');
-            const addViaText = lt('Add via LuaTools');
-            span.textContent = addViaText;
-            luatoolsButton.appendChild(span);
-            luatoolsButton.title = addViaText;
-            luatoolsButton.setAttribute('data-tooltip-text', addViaText);
-
-            luatoolsButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                backendLog('LuaTools button clicked (delegated handler will process)');
-            });
-
-            // Adiciona o botão ao Wrapper
-            mainWrapper.appendChild(luatoolsButton);
-
-            // --- INSERT WRAPPER & CALL STATUS PILL ---
-            try {
-                const match = window.location.href.match(/https:\/\/store\.steampowered\.com\/app\/(\d+)/) || window.location.href.match(/https:\/\/steamcommunity\.com\/app\/(\d+)/);
-                const appid = match ? parseInt(match[1], 10) : NaN;
-
-                if (!isNaN(appid) && typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
-                    if (window.__LuaToolsPresenceCheckInFlight && window.__LuaToolsPresenceCheckAppId === appid) return;
-
-                    window.__LuaToolsPresenceCheckInFlight = true;
-                    window.__LuaToolsPresenceCheckAppId = appid;
-                    window.__LuaToolsCurrentAppId = appid;
-
-                    Millennium.callServerMethod('luatools', 'HasLuaToolsForApp', { appid, contentScriptQuery: '' }).then(function(res){
-                        try {
-                            const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                            if (payload && payload.success && payload.exists === true) {
-                                backendLog('LuaTools already present for this app; not inserting button');
-                                window.__LuaToolsPresenceCheckInFlight = false;
-                                return;
-                            }
-
-                            if (!document.querySelector('.luatools-button') && !window.__LuaToolsButtonInserted) {
-                                // Insere o Wrapper no lugar certo
-                                const restartExisting = steamdbContainer.querySelector('.luatools-restart-button');
-                                if (restartExisting && restartExisting.after) {
-                                    restartExisting.after(mainWrapper);
-                                } else if (referenceBtn && referenceBtn.after) {
-                                    referenceBtn.after(mainWrapper);
-                                } else {
-                                    steamdbContainer.appendChild(mainWrapper);
-                                }
-
-                                // CHAMA A FUNÇÃO DE STATUS PASSANDO O WRAPPER COMO CONTAINER
-                                // O status será inserido no topo do wrapper (prepend)
-                                addGameStatusPill(appid, mainWrapper);
-
-                                window.__LuaToolsButtonInserted = true;
-                                backendLog('LuaTools button wrapper inserted');
-                            }
-                            window.__LuaToolsPresenceCheckInFlight = false;
-                        } catch(_) {
-                            // Fallback em caso de erro no parse
-                            if (!document.querySelector('.luatools-button')) {
-                                steamdbContainer.appendChild(mainWrapper);
-                                addGameStatusPill(appid, mainWrapper);
-                                window.__LuaToolsButtonInserted = true;
-                            }
-                            window.__LuaToolsPresenceCheckInFlight = false;
-                        }
-                    });
-                } else {
-                    // Fallback se não tiver appid ou backend
-                    if (!document.querySelector('.luatools-button') && !window.__LuaToolsButtonInserted) {
-                        steamdbContainer.appendChild(mainWrapper);
-                        window.__LuaToolsButtonInserted = true;
-                    }
-                }
-            } catch(_) {
-                // Fallback final
-                if (!document.querySelector('.luatools-button') && !window.__LuaToolsButtonInserted) {
-                    steamdbContainer.appendChild(mainWrapper);
-                    window.__LuaToolsButtonInserted = true;
-                }
-            }
-        } else {
-            if (!logState.missingOnce) { backendLog('LuaTools: steamdbContainer not found on this page'); logState.missingOnce = true; }
-        }
-    }
+    // (A primeira definição antiga foi removida daqui)
 
     // Try to add the button immediately if DOM is ready
     function onFrontendReady() {
@@ -3535,26 +3550,20 @@
                         if (status) {
                             if (st.status === 'checking') status.textContent = lt('Checking availability…');
                             if (st.status === 'downloading') status.textContent = lt('Downloading…');
-                            if (st.status === 'processing') status.textContent = lt('Processing package…');
+                            if (st.status === 'processing') status.textContent = lt('Processing package… Close accela after download');
                             if (st.status === 'installing') status.textContent = lt('Installing…');
                             if (st.status === 'done') status.textContent = lt('Finishing…');
                             if (st.status === 'failed') status.textContent = lt('Failed');
                         }
-                        const total = st.totalBytes || 0;
-                        const read = st.bytesRead || 0;
-                        let pct = total > 0 ? Math.floor((read / total) * 100) : (read ? 1 : 0);
-                        if (pct > 100) pct = 100;
-                        if (pct < 0) pct = 0;
-
-                        if (st.status === 'downloading' || st.status === 'processing' || st.status === 'installing') {
-                            // Reveal progress UI for download + processing states (if overlay visible)
+                        if (st.status === 'downloading'){
+                            // reveal progress UI on first download tick (if overlay visible)
                             if (wrap && wrap.style.display === 'none') wrap.style.display = 'block';
                             if (percent && percent.style.display === 'none') percent.style.display = 'block';
-                            if (bar && total > 0) bar.style.width = pct + '%';
-                            if (percent && total > 0) percent.textContent = pct + '%';
-                        }
-
-                        if (st.status === 'downloading'){
+                            const total = st.totalBytes || 0; const read = st.bytesRead || 0;
+                            let pct = total > 0 ? Math.floor((read/total)*100) : (read ? 1 : 0);
+                            if (pct > 100) pct = 100; if (pct < 0) pct = 0;
+                            if (bar) bar.style.width = pct + '%';
+                            if (percent) percent.textContent = pct + '%';
                             // Show Cancel button during download
                             const cancelBtn = overlay ? overlay.querySelector('.luatools-cancel-btn') : null;
                             if (cancelBtn) cancelBtn.style.display = '';
