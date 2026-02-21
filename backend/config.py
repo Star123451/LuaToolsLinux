@@ -14,8 +14,8 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-Site": "cross-site",
 }
 
-API_MANIFEST_URL = "https://raw.githubusercontent.com/madoiscool/lt_api_links/refs/heads/main/load_free_manifest_apis"
-API_MANIFEST_PROXY_URL = "https://luatools.vercel.app/load_free_manifest_apis"
+API_MANIFEST_URL = "https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/backend/api.json"
+API_MANIFEST_PROXY_URL = ""
 API_JSON_FILE = "api.json"
 
 UPDATE_CONFIG_FILE = "update.json"
@@ -31,4 +31,5 @@ USER_AGENT = "luatools-v61-stplugin-hoe"
 
 LOADED_APPS_FILE = "loadedappids.txt"
 APPID_LOG_FILE = "appidlogs.txt"
+
 
