@@ -69,7 +69,7 @@ def _available_theme_files() -> List[Dict[str, Any]]:
                     if isinstance(data, list):
                         for item in data:
                             if isinstance(item, dict) and item.get("value"):
-                                themes.append({"value": str(item["value"]), "label": str(item.get("label") or item["value"])})
+                                themes.append({"value": str(item["value"]), "label": str(item.get("label") or item.get("name") or item["value"])})
             except Exception as exc:
                 logger.warn(f"LuaTools: Failed to parse themes.json: {exc}")
     except Exception:

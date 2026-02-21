@@ -1,0 +1,58 @@
+:root {
+    --lt-bg-primary: #0b0f14;                     /* deep navy-black */
+    --lt-bg-secondary: #111821;                  /* darker blue-gray */
+    --lt-bg-tertiary: rgba(11, 15, 20, 0.95);
+    --lt-bg-hover: rgba(20, 28, 38, 0.95);
+    --lt-bg-container: rgba(11, 15, 20, 0.8);
+    --lt-bg-container-gradient: rgba(11, 15, 20, 0.9), #0b0f14;
+
+    --lt-accent: #00e5ff;                        /* bright cyan */
+    --lt-accent-light: #66f3ff;                  /* lighter aqua */
+    --lt-accent-dark: #00b3cc;                   /* deeper cyan */
+
+    --lt-border: rgba(0, 229, 255, 0.3);
+    --lt-border-hover: rgba(0, 229, 255, 0.8);
+
+    --lt-text: #ffffff;                          /* pure white */
+    --lt-text-secondary: #d9faff;                /* soft ice-blue */
+
+    --lt-gradient: linear-gradient(135deg, #66f3ff 0%, #00e5ff 100%);
+    --lt-gradient-light: linear-gradient(135deg, #a8f7ff 0%, #66f3ff 100%);
+
+    --lt-shadow: rgba(0, 229, 255, 0.4);
+    --lt-shadow-hover: rgba(0, 229, 255, 0.6);
+    --lt-shadow-rgba: rgba(0, 229, 255, 0.3);
+
+    --lt-rgb: 0, 229, 255;
+}
+
+/* ===== Select Dropdown Styling (Cyan Theme) ===== */
+
+select {
+    background-color: rgba(11, 15, 20, 0.95) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(0, 229, 255, 0.3) !important;
+    border-radius: 3px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select option {
+    background-color: #0b0f14;
+    color: #ffffff;
+}
+
+select option:checked {
+    background: linear-gradient(#00e5ff, #00e5ff);
+    background-color: #00e5ff !important;
+    color: #0b0f14 !important;
+}
+
+select:hover {
+    border-color: rgba(0, 229, 255, 0.8) !important;
+}
+
+select:focus {
+    outline: none;
+    border-color: #00e5ff !important;
+    box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.3);
+}

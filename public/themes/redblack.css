@@ -1,0 +1,50 @@
+:root {
+    --lt-bg-primary: #000000;
+    --lt-bg-secondary: #0d0d0d;
+    --lt-bg-tertiary: rgba(0, 0, 0, 0.95);
+    --lt-bg-hover: rgba(20, 0, 0, 0.95);
+    --lt-bg-container: rgba(0,0,0,0.6);
+    --lt-bg-container-gradient: rgba(0, 0, 0, 0.85), #000000;
+    --lt-accent: #ff0000;
+    --lt-accent-light: #ff4d4d;
+    --lt-accent-dark: #cc0000;
+    --lt-border: rgba(255, 0, 0, 0.3);
+    --lt-border-hover: rgba(255, 0, 0, 0.8);
+    --lt-text: #fff;
+    --lt-text-secondary: #cccccc;
+    --lt-gradient: linear-gradient(135deg, #ff4d4d 0%, #ff0000 100%);
+    --lt-gradient-light: linear-gradient(135deg, #ff6666 0%, #ff4d4d 100%);
+    --lt-shadow: rgba(255, 0, 0, 0.4);
+    --lt-shadow-hover: rgba(255, 0, 0, 0.6);
+    --lt-shadow-rgba: rgba(255, 0, 0, 0.3);
+    --lt-rgb: 255,0,0;
+}
+
+/* Select dropdown styling for red & black theme */
+select {
+    background-color: rgba(0, 0, 0, 0.95) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255, 0, 0, 0.3) !important;
+    border-radius: 3px;
+}
+
+select option {
+    background-color: #000000;
+    color: #fff;
+}
+
+select option:checked {
+    background: linear-gradient(#ff0000, #ff0000);
+    background-color: #ff0000 !important;
+    color: #000000 !important;
+}
+
+select:hover {
+    border-color: rgba(255, 0, 0, 0.8) !important;
+}
+
+select:focus {
+    outline: none;
+    border-color: #ff0000 !important;
+    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.3);
+}

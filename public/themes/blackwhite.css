@@ -1,0 +1,57 @@
+:root {
+    --lt-bg-primary: #000000;
+    --lt-bg-secondary: #0d0d0d;
+    --lt-bg-tertiary: rgba(0, 0, 0, 0.95);
+    --lt-bg-hover: rgba(40, 40, 40, 0.95);
+    --lt-bg-container: rgba(0, 0, 0, 0.8);
+    --lt-bg-container-gradient: rgba(0, 0, 0, 0.9), #000000;
+
+    --lt-accent: #ffffff;
+    --lt-accent-light: #f2f2f2;
+    --lt-accent-dark: #cccccc;
+
+    --lt-border: rgba(255, 255, 255, 0.3);
+    --lt-border-hover: rgba(255, 255, 255, 0.8);
+
+    --lt-text: #ffffff;
+    --lt-text-secondary: #d0d0d0;
+
+    --lt-gradient: linear-gradient(135deg, #f2f2f2 0%, #ffffff 100%);
+    --lt-gradient-light: linear-gradient(135deg, #ffffff 0%, #f2f2f2 100%);
+
+    --lt-shadow: rgba(255, 255, 255, 0.4);
+    --lt-shadow-hover: rgba(255, 255, 255, 0.6);
+
+    --lt-rgb: 255, 255, 255;
+}
+
+/* ===== Select Dropdown Styling (Black & White Theme) ===== */
+
+select {
+    background-color: rgba(0, 0, 0, 0.95) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 3px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select option {
+    background-color: #000000;
+    color: #ffffff;
+}
+
+select option:checked {
+    background: linear-gradient(#ffffff, #ffffff);
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+
+select:hover {
+    border-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+select:focus {
+    outline: none;
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
