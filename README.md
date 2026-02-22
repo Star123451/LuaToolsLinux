@@ -60,6 +60,7 @@ LuaTools discovers Steam and related tools at these locations:
 ## Credits
 
 - **LuaTools (Linux)** — by [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)
+- **Contributors** — [PeeblyWeeb](https://github.com/PeeblyWeeb)
 - **LuaTools** — original plugin by [madoiscool](https://github.com/madoiscool)
 - **SLSsteam** — by [AceSLS](https://github.com/AceSLS/SLSsteam)
 - **ACCELA / Enter The Wired** — by [ciscosweater](https://github.com/ciscosweater/enter-the-wired)
