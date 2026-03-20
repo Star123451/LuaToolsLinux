@@ -15,6 +15,24 @@
         }
     }
 
+    function performSteamRestart() {
+        backendLog('LuaTools: Initiating graceful Steam restart');
+        try {
+            // Tenta usar a função nativa da Steam para um reinício perfeito
+            if (typeof SteamClient !== 'undefined' && SteamClient.User && typeof SteamClient.User.StartRestart === 'function') {
+                SteamClient.User.StartRestart(false);
+            } else {
+                // Se falhar (versão antiga da Steam), cai pro backend bruto
+                Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' });
+            }
+        } catch(err) {
+            backendLog('LuaTools: Native restart failed, falling back to backend: ' + err);
+            try { Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' }); } catch(_) {}
+        }
+    }
+    // --------------------------------------
+
+
     backendLog('LuaTools script loaded');
     // anti-spam state
     const logState = { missingOnce: false, existsOnce: false };
@@ -49,19 +67,19 @@
     // Theme definitions (all themes bundled inline; themes.json/backend used to hydrate at runtime)
     const DEFAULT_THEMES = {
         original: { name: 'Original', bgPrimary: '#1b2838', bgSecondary: '#2a475e', bgTertiary: 'rgba(7, 7, 7, 0.86)', bgHover: 'rgba(7, 7, 7, 0.86)', bgContainer: 'rgba(11,20,30,0.6)', bgContainerGradient: 'rgba(11, 20, 30, 0.85), #0b141e', accent: '#66c0f4', accentLight: '#a4d7f5', accentDark: '#4a9ece', border: 'rgba(102,192,244,0.3)', borderHover: 'rgba(102,192,244,0.8)', text: '#fff', textSecondary: '#c7d5e0', gradient: 'linear-gradient(135deg, #66c0f4 0%, #a4d7f5 100%)', gradientLight: 'linear-gradient(135deg, #a4d7f5 0%, #7dd4ff 100%)', shadow: 'rgba(102,192,244,0.4)', shadowHover: 'rgba(102,192,244,0.6)' },
-        dark: { name: 'Dark', bgPrimary: '#1a1a1a', bgSecondary: '#2a2a2a', bgTertiary: 'rgba(15, 15, 15, 0.95)', bgHover: 'rgba(26, 26, 26, 0.95)', bgContainer: 'rgba(15,15,15,0.6)', accent: '#888888', accentLight: '#aaaaaa', accentDark: '#666666', border: 'rgba(136, 136, 136, 0.3)', borderHover: 'rgba(136, 136, 136, 0.8)', text: '#fff', textSecondary: '#c7d5e0', gradient: 'linear-gradient(135deg, #aaaaaa 0%, #888888 100%)', gradientLight: 'linear-gradient(135deg, #cccccc 0%, #aaaaaa 100%)', shadow: 'rgba(136, 136, 136, 0.4)', shadowHover: 'rgba(136, 136, 136, 0.6)' },
-        light: { name: 'Light', bgPrimary: '#f5f5f5', bgSecondary: '#ffffff', bgTertiary: 'rgba(255, 255, 255, 0.95)', bgHover: 'rgba(240, 240, 240, 0.95)', bgContainer: 'rgba(230, 230, 235, 0.8)', accent: '#0056b3', accentLight: '#0077e6', accentDark: '#003d82', border: 'rgba(0, 86, 179, 0.4)', borderHover: 'rgba(0, 86, 179, 0.8)', text: '#1a202c', textSecondary: '#4a5568', gradient: 'linear-gradient(135deg, #0077e6 0%, #0056b3 100%)', gradientLight: 'linear-gradient(135deg, #0099ff 0%, #0077e6 100%)', shadow: 'rgba(0, 86, 179, 0.25)', shadowHover: 'rgba(0, 86, 179, 0.4)' },
-        purple: { name: 'Purple', bgPrimary: '#1a1a1a', bgSecondary: '#2a2a2a', bgTertiary: 'rgba(15, 15, 15, 0.95)', bgHover: 'rgba(26, 26, 26, 0.95)', bgContainer: 'rgba(15,15,15,0.6)', accent: '#a78bfa', accentLight: '#c4b5fd', accentDark: '#8b5cf6', border: 'rgba(167, 139, 250, 0.3)', borderHover: 'rgba(167, 139, 250, 0.8)', text: '#fff', textSecondary: '#c7d5e0', gradient: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)', gradientLight: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', shadow: 'rgba(167, 139, 250, 0.4)', shadowHover: 'rgba(167, 139, 250, 0.6)' },
-        space: { name: 'Space', bgPrimary: '#0a0e27', bgSecondary: '#1a1f3a', bgTertiary: 'rgba(10, 14, 39, 0.95)', bgHover: 'rgba(26, 31, 58, 0.95)', bgContainer: 'rgba(10,14,39,0.8)', accent: '#6366f1', accentLight: '#818cf8', accentDark: '#4f46e5', border: 'rgba(99, 102, 241, 0.3)', borderHover: 'rgba(99, 102, 241, 0.8)', text: '#fff', textSecondary: '#e0e7ff', gradient: 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)', gradientLight: 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)', shadow: 'rgba(99, 102, 241, 0.4)', shadowHover: 'rgba(99, 102, 241, 0.6)' },
-        ocean: { name: 'Ocean', bgPrimary: '#0f172a', bgSecondary: '#1e293b', bgTertiary: 'rgba(15, 23, 42, 0.95)', bgHover: 'rgba(30, 41, 59, 0.95)', bgContainer: 'rgba(15,23,42,0.8)', accent: '#06b6d4', accentLight: '#22d3ee', accentDark: '#0891b2', border: 'rgba(6, 182, 212, 0.3)', borderHover: 'rgba(6, 182, 212, 0.8)', text: '#fff', textSecondary: '#cbd5e1', gradient: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)', gradientLight: 'linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)', shadow: 'rgba(6, 182, 212, 0.4)', shadowHover: 'rgba(6, 182, 212, 0.6)' },
-        forest: { name: 'Forest', bgPrimary: '#0f1f0f', bgSecondary: '#1a2e1a', bgTertiary: 'rgba(15, 31, 15, 0.95)', bgHover: 'rgba(26, 46, 26, 0.95)', bgContainer: 'rgba(15,31,15,0.8)', accent: '#10b981', accentLight: '#34d399', accentDark: '#059669', border: 'rgba(16, 185, 129, 0.3)', borderHover: 'rgba(16, 185, 129, 0.8)', text: '#fff', textSecondary: '#d1fae5', gradient: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)', gradientLight: 'linear-gradient(135deg, #6ee7b7 0%, #34d399 100%)', shadow: 'rgba(16, 185, 129, 0.4)', shadowHover: 'rgba(16, 185, 129, 0.6)' },
-        rosepine: { name: 'Rose Pine', bgPrimary: '#191724', bgSecondary: '#26233a', bgTertiary: 'rgba(25, 23, 36, 0.95)', bgHover: 'rgba(38, 35, 58, 0.95)', bgContainer: 'rgba(25,23,36,0.8)', accent: '#ea9a97', accentLight: '#f5e0dc', accentDark: '#d08080', border: 'rgba(234, 154, 151, 0.3)', borderHover: 'rgba(234, 154, 151, 0.8)', text: '#e0def4', textSecondary: '#c4b1cd', gradient: 'linear-gradient(135deg, #f5e0dc 0%, #ea9a97 100%)', gradientLight: 'linear-gradient(135deg, #f6c177 0%, #f5e0dc 100%)', shadow: 'rgba(234, 154, 151, 0.4)', shadowHover: 'rgba(234, 154, 151, 0.6)' },
-        catppuccin: { name: 'Catppuccin', bgPrimary: '#1e1e2e', bgSecondary: '#313244', bgTertiary: 'rgba(30, 30, 46, 0.95)', bgHover: 'rgba(49, 50, 68, 0.95)', bgContainer: 'rgba(30,30,46,0.8)', accent: '#89b4fa', accentLight: '#cba6f7', accentDark: '#74c7ec', border: 'rgba(137, 180, 250, 0.3)', borderHover: 'rgba(137, 180, 250, 0.8)', text: '#cdd6f4', textSecondary: '#b6bfe8', gradient: 'linear-gradient(135deg, #cba6f7 0%, #89b4fa 100%)', gradientLight: 'linear-gradient(135deg, #f38ba8 0%, #cba6f7 100%)', shadow: 'rgba(137, 180, 250, 0.4)', shadowHover: 'rgba(137, 180, 250, 0.6)' },
-        dracula: { name: 'Dracula', bgPrimary: '#282a36', bgSecondary: '#44475a', bgTertiary: 'rgba(40, 42, 54, 0.95)', bgHover: 'rgba(68, 71, 90, 0.95)', bgContainer: 'rgba(40,42,54,0.8)', accent: '#ff79c6', accentLight: '#f1fa8c', accentDark: '#ff92df', border: 'rgba(255, 121, 198, 0.3)', borderHover: 'rgba(255, 121, 198, 0.8)', text: '#f8f8f2', textSecondary: '#e0e0e0', gradient: 'linear-gradient(135deg, #ff79c6 0%, #bd93f9 100%)', gradientLight: 'linear-gradient(135deg, #8be9fd 0%, #ff79c6 100%)', shadow: 'rgba(255, 121, 198, 0.4)', shadowHover: 'rgba(255, 121, 198, 0.6)' },
-        christmas: { name: 'Christmas', bgPrimary: '#0d2818', bgSecondary: '#1a4d2e', bgTertiary: 'rgba(13, 40, 24, 0.95)', bgHover: 'rgba(26, 77, 46, 0.95)', bgContainer: 'rgba(13,40,24,0.8)', accent: '#dc2626', accentLight: '#f87171', accentDark: '#b91c1c', border: 'rgba(220, 38, 38, 0.3)', borderHover: 'rgba(220, 38, 38, 0.8)', text: '#fff', textSecondary: '#d4d4d4', gradient: 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)', gradientLight: 'linear-gradient(135deg, #fca5a5 0%, #dc2626 100%)', shadow: 'rgba(220, 38, 38, 0.4)', shadowHover: 'rgba(220, 38, 38, 0.6)' },
-        redblack: { name: 'Red & Black', bgPrimary: '#000000', bgSecondary: '#0d0d0d', bgTertiary: 'rgba(0, 0, 0, 0.95)', bgHover: 'rgba(20, 0, 0, 0.95)', bgContainer: 'rgba(0,0,0,0.6)', accent: '#ff0000', accentLight: '#ff4d4d', accentDark: '#cc0000', border: 'rgba(255, 0, 0, 0.3)', borderHover: 'rgba(255, 0, 0, 0.8)', text: '#fff', textSecondary: '#cccccc', gradient: 'linear-gradient(135deg, #ff4d4d 0%, #ff0000 100%)', gradientLight: 'linear-gradient(135deg, #ff6666 0%, #ff4d4d 100%)', shadow: 'rgba(255, 0, 0, 0.4)', shadowHover: 'rgba(255, 0, 0, 0.6)' },
-        cyanwhite: { name: 'Cyan & White', bgPrimary: '#0b0f14', bgSecondary: '#111821', bgTertiary: 'rgba(11, 15, 20, 0.95)', bgHover: 'rgba(20, 28, 38, 0.95)', bgContainer: 'rgba(11, 15, 20, 0.8)', accent: '#00e5ff', accentLight: '#66f3ff', accentDark: '#00b3cc', border: 'rgba(0, 229, 255, 0.3)', borderHover: 'rgba(0, 229, 255, 0.8)', text: '#ffffff', textSecondary: '#d9faff', gradient: 'linear-gradient(135deg, #66f3ff 0%, #00e5ff 100%)', gradientLight: 'linear-gradient(135deg, #a8f7ff 0%, #66f3ff 100%)', shadow: 'rgba(0, 229, 255, 0.4)', shadowHover: 'rgba(0, 229, 255, 0.6)' },
-        blackwhite: { name: 'Black & White', bgPrimary: '#000000', bgSecondary: '#0d0d0d', bgTertiary: 'rgba(0, 0, 0, 0.95)', bgHover: 'rgba(40, 40, 40, 0.95)', bgContainer: 'rgba(0, 0, 0, 0.8)', accent: '#ffffff', accentLight: '#f2f2f2', accentDark: '#cccccc', border: 'rgba(255, 255, 255, 0.3)', borderHover: 'rgba(255, 255, 255, 0.8)', text: '#ffffff', textSecondary: '#d0d0d0', gradient: 'linear-gradient(135deg, #f2f2f2 0%, #ffffff 100%)', gradientLight: 'linear-gradient(135deg, #ffffff 0%, #f2f2f2 100%)', shadow: 'rgba(255, 255, 255, 0.4)', shadowHover: 'rgba(255, 255, 255, 0.6)' }
+ dark: { name: 'Dark', bgPrimary: '#1a1a1a', bgSecondary: '#2a2a2a', bgTertiary: 'rgba(15, 15, 15, 0.95)', bgHover: 'rgba(26, 26, 26, 0.95)', bgContainer: 'rgba(15,15,15,0.6)', accent: '#888888', accentLight: '#aaaaaa', accentDark: '#666666', border: 'rgba(136, 136, 136, 0.3)', borderHover: 'rgba(136, 136, 136, 0.8)', text: '#fff', textSecondary: '#c7d5e0', gradient: 'linear-gradient(135deg, #aaaaaa 0%, #888888 100%)', gradientLight: 'linear-gradient(135deg, #cccccc 0%, #aaaaaa 100%)', shadow: 'rgba(136, 136, 136, 0.4)', shadowHover: 'rgba(136, 136, 136, 0.6)' },
+ light: { name: 'Light', bgPrimary: '#f5f5f5', bgSecondary: '#ffffff', bgTertiary: 'rgba(255, 255, 255, 0.95)', bgHover: 'rgba(240, 240, 240, 0.95)', bgContainer: 'rgba(230, 230, 235, 0.8)', accent: '#0056b3', accentLight: '#0077e6', accentDark: '#003d82', border: 'rgba(0, 86, 179, 0.4)', borderHover: 'rgba(0, 86, 179, 0.8)', text: '#1a202c', textSecondary: '#4a5568', gradient: 'linear-gradient(135deg, #0077e6 0%, #0056b3 100%)', gradientLight: 'linear-gradient(135deg, #0099ff 0%, #0077e6 100%)', shadow: 'rgba(0, 86, 179, 0.25)', shadowHover: 'rgba(0, 86, 179, 0.4)' },
+ purple: { name: 'Purple', bgPrimary: '#1a1a1a', bgSecondary: '#2a2a2a', bgTertiary: 'rgba(15, 15, 15, 0.95)', bgHover: 'rgba(26, 26, 26, 0.95)', bgContainer: 'rgba(15,15,15,0.6)', accent: '#a78bfa', accentLight: '#c4b5fd', accentDark: '#8b5cf6', border: 'rgba(167, 139, 250, 0.3)', borderHover: 'rgba(167, 139, 250, 0.8)', text: '#fff', textSecondary: '#c7d5e0', gradient: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)', gradientLight: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', shadow: 'rgba(167, 139, 250, 0.4)', shadowHover: 'rgba(167, 139, 250, 0.6)' },
+ space: { name: 'Space', bgPrimary: '#0a0e27', bgSecondary: '#1a1f3a', bgTertiary: 'rgba(10, 14, 39, 0.95)', bgHover: 'rgba(26, 31, 58, 0.95)', bgContainer: 'rgba(10,14,39,0.8)', accent: '#6366f1', accentLight: '#818cf8', accentDark: '#4f46e5', border: 'rgba(99, 102, 241, 0.3)', borderHover: 'rgba(99, 102, 241, 0.8)', text: '#fff', textSecondary: '#e0e7ff', gradient: 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)', gradientLight: 'linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%)', shadow: 'rgba(99, 102, 241, 0.4)', shadowHover: 'rgba(99, 102, 241, 0.6)' },
+ ocean: { name: 'Ocean', bgPrimary: '#0f172a', bgSecondary: '#1e293b', bgTertiary: 'rgba(15, 23, 42, 0.95)', bgHover: 'rgba(30, 41, 59, 0.95)', bgContainer: 'rgba(15,23,42,0.8)', accent: '#06b6d4', accentLight: '#22d3ee', accentDark: '#0891b2', border: 'rgba(6, 182, 212, 0.3)', borderHover: 'rgba(6, 182, 212, 0.8)', text: '#fff', textSecondary: '#cbd5e1', gradient: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)', gradientLight: 'linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)', shadow: 'rgba(6, 182, 212, 0.4)', shadowHover: 'rgba(6, 182, 212, 0.6)' },
+ forest: { name: 'Forest', bgPrimary: '#0f1f0f', bgSecondary: '#1a2e1a', bgTertiary: 'rgba(15, 31, 15, 0.95)', bgHover: 'rgba(26, 46, 26, 0.95)', bgContainer: 'rgba(15,31,15,0.8)', accent: '#10b981', accentLight: '#34d399', accentDark: '#059669', border: 'rgba(16, 185, 129, 0.3)', borderHover: 'rgba(16, 185, 129, 0.8)', text: '#fff', textSecondary: '#d1fae5', gradient: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)', gradientLight: 'linear-gradient(135deg, #6ee7b7 0%, #34d399 100%)', shadow: 'rgba(16, 185, 129, 0.4)', shadowHover: 'rgba(16, 185, 129, 0.6)' },
+     rosepine: { name: 'Rose Pine', bgPrimary: '#191724', bgSecondary: '#26233a', bgTertiary: 'rgba(25, 23, 36, 0.95)', bgHover: 'rgba(38, 35, 58, 0.95)', bgContainer: 'rgba(25,23,36,0.8)', accent: '#ea9a97', accentLight: '#f5e0dc', accentDark: '#d08080', border: 'rgba(234, 154, 151, 0.3)', borderHover: 'rgba(234, 154, 151, 0.8)', text: '#e0def4', textSecondary: '#c4b1cd', gradient: 'linear-gradient(135deg, #f5e0dc 0%, #ea9a97 100%)', gradientLight: 'linear-gradient(135deg, #f6c177 0%, #f5e0dc 100%)', shadow: 'rgba(234, 154, 151, 0.4)', shadowHover: 'rgba(234, 154, 151, 0.6)' },
+ catppuccin: { name: 'Catppuccin', bgPrimary: '#1e1e2e', bgSecondary: '#313244', bgTertiary: 'rgba(30, 30, 46, 0.95)', bgHover: 'rgba(49, 50, 68, 0.95)', bgContainer: 'rgba(30,30,46,0.8)', accent: '#89b4fa', accentLight: '#cba6f7', accentDark: '#74c7ec', border: 'rgba(137, 180, 250, 0.3)', borderHover: 'rgba(137, 180, 250, 0.8)', text: '#cdd6f4', textSecondary: '#b6bfe8', gradient: 'linear-gradient(135deg, #cba6f7 0%, #89b4fa 100%)', gradientLight: 'linear-gradient(135deg, #f38ba8 0%, #cba6f7 100%)', shadow: 'rgba(137, 180, 250, 0.4)', shadowHover: 'rgba(137, 180, 250, 0.6)' },
+ dracula: { name: 'Dracula', bgPrimary: '#282a36', bgSecondary: '#44475a', bgTertiary: 'rgba(40, 42, 54, 0.95)', bgHover: 'rgba(68, 71, 90, 0.95)', bgContainer: 'rgba(40,42,54,0.8)', accent: '#ff79c6', accentLight: '#f1fa8c', accentDark: '#ff92df', border: 'rgba(255, 121, 198, 0.3)', borderHover: 'rgba(255, 121, 198, 0.8)', text: '#f8f8f2', textSecondary: '#e0e0e0', gradient: 'linear-gradient(135deg, #ff79c6 0%, #bd93f9 100%)', gradientLight: 'linear-gradient(135deg, #8be9fd 0%, #ff79c6 100%)', shadow: 'rgba(255, 121, 198, 0.4)', shadowHover: 'rgba(255, 121, 198, 0.6)' },
+ christmas: { name: 'Christmas', bgPrimary: '#0d2818', bgSecondary: '#1a4d2e', bgTertiary: 'rgba(13, 40, 24, 0.95)', bgHover: 'rgba(26, 77, 46, 0.95)', bgContainer: 'rgba(13,40,24,0.8)', accent: '#dc2626', accentLight: '#f87171', accentDark: '#b91c1c', border: 'rgba(220, 38, 38, 0.3)', borderHover: 'rgba(220, 38, 38, 0.8)', text: '#fff', textSecondary: '#d4d4d4', gradient: 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)', gradientLight: 'linear-gradient(135deg, #fca5a5 0%, #dc2626 100%)', shadow: 'rgba(220, 38, 38, 0.4)', shadowHover: 'rgba(220, 38, 38, 0.6)' },
+ redblack: { name: 'Red & Black', bgPrimary: '#000000', bgSecondary: '#0d0d0d', bgTertiary: 'rgba(0, 0, 0, 0.95)', bgHover: 'rgba(20, 0, 0, 0.95)', bgContainer: 'rgba(0,0,0,0.6)', accent: '#ff0000', accentLight: '#ff4d4d', accentDark: '#cc0000', border: 'rgba(255, 0, 0, 0.3)', borderHover: 'rgba(255, 0, 0, 0.8)', text: '#fff', textSecondary: '#cccccc', gradient: 'linear-gradient(135deg, #ff4d4d 0%, #ff0000 100%)', gradientLight: 'linear-gradient(135deg, #ff6666 0%, #ff4d4d 100%)', shadow: 'rgba(255, 0, 0, 0.4)', shadowHover: 'rgba(255, 0, 0, 0.6)' },
+ cyanwhite: { name: 'Cyan & White', bgPrimary: '#0b0f14', bgSecondary: '#111821', bgTertiary: 'rgba(11, 15, 20, 0.95)', bgHover: 'rgba(20, 28, 38, 0.95)', bgContainer: 'rgba(11, 15, 20, 0.8)', accent: '#00e5ff', accentLight: '#66f3ff', accentDark: '#00b3cc', border: 'rgba(0, 229, 255, 0.3)', borderHover: 'rgba(0, 229, 255, 0.8)', text: '#ffffff', textSecondary: '#d9faff', gradient: 'linear-gradient(135deg, #66f3ff 0%, #00e5ff 100%)', gradientLight: 'linear-gradient(135deg, #a8f7ff 0%, #66f3ff 100%)', shadow: 'rgba(0, 229, 255, 0.4)', shadowHover: 'rgba(0, 229, 255, 0.6)' },
+ blackwhite: { name: 'Black & White', bgPrimary: '#000000', bgSecondary: '#0d0d0d', bgTertiary: 'rgba(0, 0, 0, 0.95)', bgHover: 'rgba(40, 40, 40, 0.95)', bgContainer: 'rgba(0, 0, 0, 0.8)', accent: '#ffffff', accentLight: '#f2f2f2', accentDark: '#cccccc', border: 'rgba(255, 255, 255, 0.3)', borderHover: 'rgba(255, 255, 255, 0.8)', text: '#ffffff', textSecondary: '#d0d0d0', gradient: 'linear-gradient(135deg, #f2f2f2 0%, #ffffff 100%)', gradientLight: 'linear-gradient(135deg, #ffffff 0%, #f2f2f2 100%)', shadow: 'rgba(255, 255, 255, 0.4)', shadowHover: 'rgba(255, 255, 255, 0.6)' }
     };
 
     // Runtime THEMES map - all themes bundled inline; backend/file can add more at runtime.
@@ -81,7 +99,7 @@
             if (Array.isArray(payload)) return payload;
         } catch (_) {
             /* ignore */ }
-        return [];
+            return [];
     }
 
     function _applyBackendThemes(themesArray) {
@@ -151,7 +169,7 @@
     function loadThemes() {
         return Promise.all([
             loadThemesFromFile(),
-            loadThemesFromBackend()
+                           loadThemesFromBackend()
         ]).catch(function() {
             /* ignore */ });
     }
@@ -188,8 +206,8 @@
         const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
         return result ? [
             parseInt(result[1], 16),
-            parseInt(result[2], 16),
-            parseInt(result[3], 16)
+ parseInt(result[2], 16),
+ parseInt(result[3], 16)
         ] : [102, 192, 244];
     }
 
@@ -198,21 +216,21 @@
         const rgb = hexToRgb(theme.accent);
         return {
             modalBg: `linear-gradient(135deg, ${theme.bgPrimary} 0%, ${theme.bgSecondary} 100%)`,
-            border: theme.accent,
-            borderRgba: theme.border,
-            text: theme.text,
-            textSecondary: theme.textSecondary,
-            accent: theme.accent,
-            accentLight: theme.accentLight,
-            gradient: theme.gradient,
-            gradientLight: theme.gradientLight,
-            shadow: theme.shadow,
-            shadowHover: theme.shadowHover,
-            shadowRgba: theme.shadow.replace('0.4', '0.3'),
-            bgContainer: theme.bgContainer,
-            bgTertiary: theme.bgTertiary,
-            bgHover: theme.bgHover,
-            rgbString: rgb.join(',')
+ border: theme.accent,
+ borderRgba: theme.border,
+ text: theme.text,
+ textSecondary: theme.textSecondary,
+ accent: theme.accent,
+ accentLight: theme.accentLight,
+ gradient: theme.gradient,
+ gradientLight: theme.gradientLight,
+ shadow: theme.shadow,
+ shadowHover: theme.shadowHover,
+ shadowRgba: theme.shadow.replace('0.4', '0.3'),
+ bgContainer: theme.bgContainer,
+ bgTertiary: theme.bgTertiary,
+ bgHover: theme.bgHover,
+ rgbString: rgb.join(',')
         };
     }
 
@@ -251,152 +269,215 @@
         const _borderMid        = _border.replace('0.3', '0.5');
 
         return `
-            :root {
-                --lt-bg-primary: ${_bgPrimary};
-                --lt-bg-secondary: ${_bgSecondary};
-                --lt-bg-tertiary: ${_bgTertiary};
-                --lt-bg-hover: ${_bgHover};
-                --lt-bg-container: ${_bgContainer};
-                --lt-accent: ${_accent};
-                --lt-accent-light: ${_accentLight};
-                --lt-border: ${_border};
-                --lt-border-hover: ${_borderHover};
-                --lt-text: ${_text};
-                --lt-text-secondary: ${_textSec};
-                --lt-gradient: ${_gradient};
-                --lt-gradient-light: ${_gradientLight};
-                --lt-shadow: ${_shadow};
-                --lt-shadow-hover: ${_shadowHover};
-                --lt-modal-bg: ${_modalBg};
-                --lt-icon-btn-bg: ${_iconBtnBg};
-                --lt-icon-btn-hover: ${_iconBtnHover};
-                --lt-action-btn-hover: ${_actionBtnHover};
-                --lt-item-bg: ${_itemBg};
-            }
+        :root {
+            --lt-bg-primary: ${_bgPrimary};
+            --lt-bg-secondary: ${_bgSecondary};
+            --lt-bg-tertiary: ${_bgTertiary};
+            --lt-bg-hover: ${_bgHover};
+            --lt-bg-container: ${_bgContainer};
+            --lt-accent: ${_accent};
+            --lt-accent-light: ${_accentLight};
+            --lt-border: ${_border};
+            --lt-border-hover: ${_borderHover};
+            --lt-text: ${_text};
+            --lt-text-secondary: ${_textSec};
+            --lt-gradient: ${_gradient};
+            --lt-gradient-light: ${_gradientLight};
+            --lt-shadow: ${_shadow};
+            --lt-shadow-hover: ${_shadowHover};
+            --lt-modal-bg: ${_modalBg};
+            --lt-icon-btn-bg: ${_iconBtnBg};
+            --lt-icon-btn-hover: ${_iconBtnHover};
+            --lt-action-btn-hover: ${_actionBtnHover};
+            --lt-item-bg: ${_itemBg};
+        }
 
-            /* Force overlay backdrops to follow the active theme */
-            .luatools-settings-overlay,
-            .luatools-overlay,
-            .luatools-fixes-results-overlay,
-            .luatools-loading-fixes-overlay,
-            .luatools-unfix-overlay,
-            .luatools-settings-manager-overlay,
-            .luatools-loadedapps-overlay {
-                background: rgba(${_rgb}, 0.12) !important;
-                backdrop-filter: blur(8px) !important;
-            }
+        /* Force overlay backdrops to follow the active theme */
+        .luatools-settings-overlay,
+        .luatools-overlay,
+        .luatools-fixes-results-overlay,
+        .luatools-loading-fixes-overlay,
+        .luatools-unfix-overlay,
+        .luatools-settings-manager-overlay,
+        .luatools-loadedapps-overlay {
+            background: rgba(${_rgb}, 0.12) !important;
+            backdrop-filter: blur(8px) !important;
+        }
 
-            /* Select dropdowns inside overlays */
-            .luatools-settings-overlay select,
-            .luatools-settings-manager-overlay select,
-            .luatools-overlay select,
-            .luatools-fixes-results-overlay select,
-            .luatools-loadedapps-overlay select {
-                background-color: ${_bgTertiary} !important;
-                color: ${_text} !important;
-                border: 1px solid ${_border} !important;
-                border-radius: 3px !important;
-                padding: 6px 8px !important;
-                font-size: 14px !important;
-            }
-            .luatools-settings-overlay select option,
-            .luatools-settings-manager-overlay select option,
-            .luatools-overlay select option,
-            .luatools-fixes-results-overlay select option,
-            .luatools-loadedapps-overlay select option {
-                background-color: ${_bgPrimary} !important;
-                color: ${_text} !important;
-            }
-            .luatools-settings-overlay select option:checked,
-            .luatools-settings-manager-overlay select option:checked,
-            .luatools-overlay select option:checked,
-            .luatools-fixes-results-overlay select option:checked,
-            .luatools-loadedapps-overlay select option:checked {
-                background: ${_accent} !important;
-                color: ${_text} !important;
-            }
-            .luatools-settings-overlay select:hover,
-            .luatools-settings-manager-overlay select:hover,
-            .luatools-overlay select:hover,
-            .luatools-fixes-results-overlay select:hover,
-            .luatools-loadedapps-overlay select:hover {
-                border-color: ${_borderHover} !important;
-            }
-            .luatools-settings-overlay select:focus,
-            .luatools-settings-manager-overlay select:focus,
-            .luatools-overlay select:focus,
-            .luatools-fixes-results-overlay select:focus,
-            .luatools-loadedapps-overlay select:focus {
-                outline: none !important;
-                border-color: ${_accent} !important;
-                box-shadow: 0 0 0 2px ${_shadow} !important;
-            }
-            .luatools-btn {
-                padding: 12px 24px;
-                background: ${_bgTertiary};
-                border: 2px solid ${_borderMid};
-                border-radius: 12px;
-                color: ${_text};
-                font-size: 15px;
-                font-weight: 600;
-                text-decoration: none;
-                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-                cursor: pointer;
-                box-shadow: 0 2px 8px ${_shadow};
-                letter-spacing: 0.3px;
-            }
-            .luatools-btn:hover:not([data-disabled="1"]) {
-                background: ${_bgHover};
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px ${_shadowHover};
-                border-color: ${_borderHover};
-            }
-            .luatools-btn.primary {
-                background: ${_gradient};
-                border-color: ${_borderHover};
-                color: ${_text};
-                font-weight: 700;
-                box-shadow: 0 4px 15px ${_shadow}, inset 0 1px 0 rgba(255,255,255,0.3);
-                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-            }
-            .luatools-btn.primary:hover:not([data-disabled="1"]) {
-                background: ${_gradientLight};
-                transform: translateY(-3px) scale(1.03);
-                box-shadow: 0 8px 25px ${_shadowHover}, inset 0 1px 0 rgba(255,255,255,0.4);
-            }
-            .luatools-input-group { margin-bottom: 12px; }
-            .luatools-input-label { display: block; font-size: 13px; color: ${_textSec}; margin-bottom: 6px; font-weight: 600; }
-            .luatools-input { width: 100%; padding: 10px; background: ${_bgPrimary}; border: 1px solid ${_border}; border-radius: 6px; color: ${_text}; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
-            .luatools-input:focus { border-color: ${_accent}; outline: none; }
+        /* Select dropdowns inside overlays */
+        .luatools-settings-overlay select,
+        .luatools-settings-manager-overlay select,
+        .luatools-overlay select,
+        .luatools-fixes-results-overlay select,
+        .luatools-loadedapps-overlay select {
+            background-color: ${_bgTertiary} !important;
+            color: ${_text} !important;
+            border: 1px solid ${_border} !important;
+            border-radius: 3px !important;
+            padding: 6px 8px !important;
+            font-size: 14px !important;
+        }
+        .luatools-settings-overlay select option,
+        .luatools-settings-manager-overlay select option,
+        .luatools-overlay select option,
+        .luatools-fixes-results-overlay select option,
+        .luatools-loadedapps-overlay select option {
+            background-color: ${_bgPrimary} !important;
+            color: ${_text} !important;
+        }
+        .luatools-settings-overlay select option:checked,
+        .luatools-settings-manager-overlay select option:checked,
+        .luatools-overlay select option:checked,
+        .luatools-fixes-results-overlay select option:checked,
+        .luatools-loadedapps-overlay select option:checked {
+            background: ${_accent} !important;
+            color: ${_text} !important;
+        }
+        .luatools-settings-overlay select:hover,
+        .luatools-settings-manager-overlay select:hover,
+        .luatools-overlay select:hover,
+        .luatools-fixes-results-overlay select:hover,
+        .luatools-loadedapps-overlay select:hover {
+            border-color: ${_borderHover} !important;
+        }
+        .luatools-settings-overlay select:focus,
+        .luatools-settings-manager-overlay select:focus,
+        .luatools-overlay select:focus,
+        .luatools-fixes-results-overlay select:focus,
+        .luatools-loadedapps-overlay select:focus {
+            outline: none !important;
+            border-color: ${_accent} !important;
+            box-shadow: 0 0 0 2px ${_shadow} !important;
+        }
+        .luatools-btn {
+            padding: 12px 24px;
+            background: ${_bgTertiary};
+            border: 2px solid ${_borderMid};
+            border-radius: 12px;
+            color: ${_text};
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: pointer;
+            box-shadow: 0 2px 8px ${_shadow};
+            letter-spacing: 0.3px;
+        }
+        .luatools-btn:hover:not([data-disabled="1"]) {
+            background: ${_bgHover};
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px ${_shadowHover};
+            border-color: ${_borderHover};
+        }
+        .luatools-btn.primary {
+            background: ${_gradient};
+            border-color: ${_borderHover};
+            color: ${_text};
+            font-weight: 700;
+            box-shadow: 0 4px 15px ${_shadow}, inset 0 1px 0 rgba(255,255,255,0.3);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        .luatools-btn.primary:hover:not([data-disabled="1"]) {
+            background: ${_gradientLight};
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 8px 25px ${_shadowHover}, inset 0 1px 0 rgba(255,255,255,0.4);
+        }
+        .luatools-input-group { margin-bottom: 12px; }
+        .luatools-input-label { display: block; font-size: 13px; color: ${_textSec}; margin-bottom: 6px; font-weight: 600; }
+        .luatools-input { width: 100%; padding: 10px; background: ${_bgPrimary}; border: 1px solid ${_border}; border-radius: 6px; color: ${_text}; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
+        .luatools-input:focus { border-color: ${_accent}; outline: none; }
 
-            /* Icon button sizing fix */
-            .luatools-icon-button {
-                padding: 0 !important;
-                width: 34px !important;
-                height: 34px !important;
-                min-width: 34px !important;
-                display: inline-flex !important;
-                align-items: center;
-                justify-content: center;
-            }
-            .luatools-icon-button img, .luatools-icon-button svg { margin: 0 !important; vertical-align: middle; }
+        /* Icon button sizing fix */
+        .luatools-icon-button {
+            padding: 0 !important;
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+        .luatools-icon-button img, .luatools-icon-button svg { margin: 0 !important; vertical-align: middle; }
 
-            @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
-            @keyframes slideUp {
-                from { opacity: 0; transform: scale(0.9); }
-                to   { opacity: 1; transform: scale(1);   }
-            }
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to   { transform: rotate(360deg); }
-            }
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50%       { opacity: 0.7; }
-            }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: scale(0.9); }
+            to   { opacity: 1; transform: scale(1);   }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.7; }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.7; }
+        }
+
+        /* --- BLINDAGEM DE ÍCONES (PROTEÇÃO CONTRA TEMAS AGRESSIVOS) --- */
+        i.fa-solid, i.fas, .fa-solid {
+            font-family: "Font Awesome 6 Free" !important;
+            font-weight: 900 !important;
+            font-style: normal !important;
+        }
+
+        i.fa-brands, i.fab, .fa-brands {
+            font-family: "Font Awesome 6 Brands" !important;
+            font-weight: 400 !important;
+            font-style: normal !important;
+        }
+
+        i[class*="fa-"] {
+            display: inline-block !important;
+            font-variant: normal !important;
+            text-rendering: auto !important;
+            line-height: 1 !important;
+        }
+        /* --- FIM DA BLINDAGEM --- */
+
+
+        /* --- CÓDIGO DO NOVO SWITCH --- */
+        .lt-switch { position: relative; display: inline-block; width: 64px; height: 28px; vertical-align: middle; }
+        .lt-switch input { opacity: 0; width: 0; height: 0; margin: 0; padding: 0; }
+        .lt-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0,0,0,0.5); transition: .3s; border-radius: 34px;
+            border: 1px solid var(--lt-border);
+        }
+        .lt-slider:before {
+            position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px;
+            background-color: #fff; transition: .3s; border-radius: 50%; z-index: 2;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        /* Texto NO (Fica na direita, branco) */
+        .lt-slider:after {
+            content: "NO"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            font-size: 11px; font-weight: 800; color: #a9b2c3; z-index: 1; transition: .3s;
+        }
+
+        /* Quando está ligado (YES) */
+        input:checked + .lt-slider {
+            background-color: var(--lt-accent); border-color: var(--lt-accent);
+            box-shadow: 0 0 8px var(--lt-shadow);
+        }
+        input:checked + .lt-slider:before { transform: translateX(36px); }
+        /* Texto YES (Fica na esquerda, com a cor de fundo escura do seu tema para dar contraste) */
+        input:checked + .lt-slider:after {
+            content: "YES"; left: 10px; right: auto; color: var(--lt-bg-primary);
+        }
+        /* --- FIM DO CÓDIGO DO SWITCH --- */
+
         `;
     }
 
@@ -697,6 +778,23 @@
             }
             // ----------------------------------
 
+            // --- NOVO BOTÃO DE RESTART NO MENU PRINCIPAL ---
+            const restartMenuBtn = createMenuButton('lt-menu-restart', 'menu.restart', 'Restart Steam', 'fa-power-off');
+
+            if (restartMenuBtn) {
+                restartMenuBtn.style.marginTop = "8px"; // Pequeno espaçamento extra
+                restartMenuBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    try {
+                        // Fecha o menu antes de reiniciar
+                        overlay.remove();
+                        // Chama a nossa nova função de reinício gracioso
+                        performSteamRestart();
+                    } catch(_) {}
+                });
+            }
+            // ----------------------------------------------
+
             body.appendChild(container);
 
             header.appendChild(title);
@@ -714,11 +812,18 @@
                         Millennium.callServerMethod('luatools', 'CheckForUpdatesNow', { contentScriptQuery: '' }).then(function(res){
                             try {
                                 const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                                const msg = (payload && payload.message) ? String(payload.message) : lt('No updates available.');
+                                const hasError = payload && payload.success === false;
+                                const msg = hasError
+                                    ? String(payload.error || lt('Update check failed.'))
+                                    : ((payload && payload.message) ? String(payload.message) : lt('No updates available.'));
                                 ShowLuaToolsAlert('LuaTools', msg);
-                            } catch(_) {}
+                            } catch(_) {
+                                ShowLuaToolsAlert('LuaTools', lt('Update check failed.'));
+                            }
                         });
-                    } catch(_) {}
+                    } catch(_) {
+                        ShowLuaToolsAlert('LuaTools', lt('Update check failed.'));
+                    }
                 });
             }
 
@@ -930,6 +1035,32 @@
 
     let settingsMenuPending = false;
 
+    function getTheme() {
+        const themes = window.__LuaToolsThemes || [];
+        const currentThemeName = window.__LuaToolsSettings?.values?.general?.theme || 'original';
+        return themes.find(t => t.value === currentThemeName) || themes[0] || {};
+    }
+
+    // Injeta o CSS do Switch com suporte a temas
+    if (!document.getElementById('luatools-switch-css')) {
+        const style = document.createElement('style');
+        style.id = 'luatools-switch-css';
+        style.textContent = `
+        .lt-switch { position: relative; display: inline-block; width: 80px; height: 32px; }
+        .lt-switch input { opacity: 0; width: 0; height: 0; }
+        .lt-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .4s; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); }
+        .lt-slider:before { position: absolute; content: ""; height: 24px; width: 34px; left: 4px; bottom: 3px; background-color: #fff; transition: .4s; border-radius: 4px; z-index: 2; }
+        .lt-switch-text { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 11px; font-weight: 800; z-index: 1; box-sizing: border-box; }
+        .lt-text-yes { color: #000; opacity: 0; transition: .3s; }
+        .lt-text-no { color: #fff; opacity: 1; transition: .3s; }
+        input:checked + .lt-slider { background-color: var(--accent-color); border-color: var(--accent-color); }
+        input:checked + .lt-slider:before { transform: translateX(38px); }
+        input:checked + .lt-slider .lt-text-yes { opacity: 1; }
+        input:checked + .lt-slider .lt-text-no { opacity: 0; }
+        `;
+        document.head.appendChild(style);
+    }
+
     // Helper: show a Steam-style popup with a 10s loading bar (custom UI)
     function showTestPopup() {
 
@@ -1113,7 +1244,8 @@
 
         function createFixButton(label, text, icon, isSuccess, onClick) {
             const section = document.createElement('div');
-            section.style.cssText = 'width:100%;text-align:center;';
+            // MODIFICADO: Adicionado height fixo de 85px e display flex em coluna
+            section.style.cssText = 'width:100%;text-align:center; height:85px; display:flex; flex-direction:column;';
 
             const sectionLabel = document.createElement('div');
             sectionLabel.style.cssText = 'font-size:12px;color:var(--lt-accent);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:1px;';
@@ -1121,7 +1253,8 @@
 
             const btn = document.createElement('a');
             btn.href = '#';
-            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;padding:14px 24px;background:var(--lt-item-bg);border:1px solid var(--lt-border);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
+            // MODIFICADO: Adicionado 'flex: 1' para o botão esticar e reduzido o padding vertical de 14px para 8px
+            btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;padding:8px 24px; flex:1; background:var(--lt-item-bg);border:1px solid var(--lt-border);border-radius:12px;color:#fff;font-size:15px;font-weight:500;text-decoration:none;transition:all 0.3s ease;cursor:pointer;';
             btn.innerHTML = '<i class="fa-solid ' + icon + '" style="font-size:16px;"></i><span>' + text + '</span>';
 
             if (isSuccess) {
@@ -1144,28 +1277,11 @@
             return section;
         }
 
-        // left thing in fixes modal
-        const genericStatus = data.genericFix.status;
-        const genericSection = createFixButton(
-            lt('Generic Fix'),
-                                               genericStatus === 200 ? lt('Apply') : lt('No generic fix'),
-                                               genericStatus === 200 ? 'fa-check' : 'fa-circle-xmark',
-                                               genericStatus === 200 ? true : false,
-                                               function(e) {
-                                                   e.preventDefault();
-                                                   if (genericStatus === 200 && isGameInstalled) {
-                                                       const genericUrl = 'https://files.luatools.work/GameBypasses/' + data.appid + '.zip';
-                                                       applyFix(data.appid, genericUrl, lt('Generic Fix'), data.gameName, overlay);
-                                                   }
-                                               }
-        );
-        leftColumn.appendChild(genericSection);
+        // ==========================================
+        // COLUNA DA ESQUERDA (Botões 1, 2, 3 e 4)
+        // ==========================================
 
-        if (!isGameInstalled) {
-            genericSection.querySelector('a').style.opacity = '0.5';
-            genericSection.querySelector('a').style.cursor = 'not-allowed';
-        }
-
+        // 1. ONLINE FIX
         const onlineStatus = data.onlineFix.status;
         const onlineSection = createFixButton(
             lt('Online Fix'),
@@ -1180,19 +1296,100 @@
                                                   }
                                               }
         );
-        leftColumn.appendChild(onlineSection);
-
         if (!isGameInstalled) {
             onlineSection.querySelector('a').style.opacity = '0.5';
             onlineSection.querySelector('a').style.cursor = 'not-allowed';
         }
+        leftColumn.appendChild(onlineSection);
 
-        // right
+        // 2. ONLINE FIX (SLS) - (Simulate Spacewars)
+        const fakeIdSection = createFixButton(
+            lt('Online Fix (SLS)'),
+                                              lt('Checking...'),
+                                              'fa-gamepad',
+                                              null,
+                                              function(e) {
+                                                  e.preventDefault();
+                                                  const btn = this;
+                                                  const isRemove = btn.dataset.action === 'remove';
+                                                  const originalContent = btn.innerHTML;
+                                                  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
+                                                  btn.style.opacity = '0.7';
+                                                  const method = isRemove ? 'RemoveFakeAppId' : 'AddFakeAppId';
+                                                  Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
+                                                  .then(function(res){
+                                                      const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                                                      btn.innerHTML = originalContent;
+                                                      btn.style.opacity = '1';
+                                                      if (payload && payload.success) {
+                                                          if (isRemove) {
+                                                              setupFakeIdButtonState(btn, false);
+                                                              ShowLuaToolsAlert('Online Fix', lt('FakeAppId removed from config.'));
+                                                          } else {
+                                                              setupFakeIdButtonState(btn, true);
+                                                              ShowLuaToolsAlert('Online Fix', payload.message || lt('FakeAppId added. Restart Steam to apply.'));
+                                                          }
+                                                      } else {
+                                                          ShowLuaToolsAlert('Error', payload.error || 'Unknown error');
+                                                      }
+                                                  })
+                                                  .catch(function(err){
+                                                      btn.innerHTML = originalContent;
+                                                      btn.style.opacity = '1';
+                                                      ShowLuaToolsAlert('Error', err);
+                                                  });
+                                              }
+        );
+        function setupFakeIdButtonState(btn, exists) {
+            if (exists) {
+                btn.dataset.action = 'remove';
+                btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove FakeAppId') + '</span>';
+                btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
+                btn.style.borderColor = 'rgba(255,80,80,0.5)';
+
+            } else {
+                btn.dataset.action = 'add';
+                btn.innerHTML = '<i class="fa-solid fa-gamepad"></i><span>' + lt('Simulate Spacewars to play online') + '</span>';
+                btn.style.background = 'var(--lt-item-bg)';
+                btn.style.borderColor = 'var(--lt-border)';
+            }
+        }
+        Millennium.callServerMethod('luatools', 'CheckFakeAppIdStatus', { appid: data.appid, contentScriptQuery: '' })
+        .then(function(res){
+            const payload = typeof res === 'string' ? JSON.parse(res) : res;
+            const exists = payload && payload.success && payload.exists;
+            const btn = fakeIdSection.querySelector('a');
+            setupFakeIdButtonState(btn, exists);
+        });
+        leftColumn.appendChild(fakeIdSection);
+
+        // 3. GENERIC FIX
+        const genericStatus = data.genericFix.status;
+        const genericSection = createFixButton(
+            lt('Generic Fix'),
+                                               genericStatus === 200 ? lt('Apply') : lt('No generic fix'),
+                                               genericStatus === 200 ? 'fa-check' : 'fa-circle-xmark',
+                                               genericStatus === 200 ? true : false,
+                                               function(e) {
+                                                   e.preventDefault();
+                                                   if (genericStatus === 200 && isGameInstalled) {
+                                                       const genericUrl = 'https://files.luatools.work/GameBypasses/' + data.appid + '.zip';
+                                                       applyFix(data.appid, genericUrl, lt('Generic Fix'), data.gameName, overlay);
+                                                   }
+                                               }
+        );
+        if (!isGameInstalled) {
+            genericSection.querySelector('a').style.opacity = '0.5';
+            genericSection.querySelector('a').style.cursor = 'not-allowed';
+        }
+        leftColumn.appendChild(genericSection);
+
+        // 4. ALL-IN-ONE FIXES
         const aioSection = createFixButton(
             lt('All-In-One Fixes'),
                                            lt('Online Fix (Unsteam)'),
                                            'fa-globe',
-                                           null, // default blue button
+                                           null,
                                            function(e) {
                                                e.preventDefault();
                                                if (isGameInstalled) {
@@ -1201,17 +1398,23 @@
                                                }
                                            }
         );
-        rightColumn.appendChild(aioSection);
         if (!isGameInstalled) {
             aioSection.querySelector('a').style.opacity = '0.5';
             aioSection.querySelector('a').style.cursor = 'not-allowed';
         }
-        // --- BOTÃO NATIVE FIX (LINUX) ---
+        leftColumn.appendChild(aioSection);
+
+
+        // ==========================================
+        // COLUNA DA DIREITA (Botões 5, 6, 7 e 8)
+        // ==========================================
+
+        // 5. LINUX NATIVE FIX
         const nativeFixSection = createFixButton(
             lt('Linux Native Fix'),
-                                                 lt('Fix Permissions (+x)'),
-                                                 'fa-linux', // Ícone
-                                                 null, // Cor padrão
+                                                 lt('When Native Games dont open'),
+                                                 'fa-linux',
+                                                 null,
                                                  function(e) {
                                                      e.preventDefault();
                                                      if (isGameInstalled) {
@@ -1246,16 +1449,16 @@
                                                      }
                                                  }
         );
-        rightColumn.appendChild(nativeFixSection);
-
         if (!isGameInstalled) {
             nativeFixSection.querySelector('a').style.opacity = '0.5';
             nativeFixSection.querySelector('a').style.cursor = 'not-allowed';
         }
-        // --- BUTTON: FIX CONFIG (TOKEN) ---
+        rightColumn.appendChild(nativeFixSection);
+
+        // 6. CONFIGURATION (TOKEN)
         const configFixSection = createFixButton(
-            lt('Configuration'),
-                                                 lt('Checking...'), // Texto inicial
+            lt('FIX GAME ERROR CONFIG'),
+                                                 lt('Checking...'),
                                                  'fa-file-code',
                                                  null,
                                                  function(e) {
@@ -1263,20 +1466,14 @@
                                                      const btn = this;
                                                      const isRemove = btn.dataset.action === 'remove';
                                                      const originalContent = btn.innerHTML;
-
-                                                     // Visual feedback
                                                      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
                                                      btn.style.opacity = '0.7';
-
                                                      const method = isRemove ? 'RemoveGameToken' : 'AddGameToken';
-
                                                      Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
                                                      .then(function(res){
                                                          const payload = typeof res === 'string' ? JSON.parse(res) : res;
-
                                                          btn.innerHTML = originalContent;
                                                          btn.style.opacity = '1';
-
                                                          if (payload && payload.success) {
                                                              if (isRemove) {
                                                                  setupTokenButtonState(btn, false);
@@ -1296,22 +1493,20 @@
                                                      });
                                                  }
         );
-
         function setupTokenButtonState(btn, exists) {
             if (exists) {
                 btn.dataset.action = 'remove';
                 btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove Token') + '</span>';
                 btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
                 btn.style.borderColor = 'rgba(255,80,80,0.5)';
+
             } else {
                 btn.dataset.action = 'add';
-                btn.innerHTML = '<i class="fa-solid fa-file-code"></i><span>' + lt('Fix Config Token') + '</span>';
-                btn.style.background = '';
-                btn.style.borderColor = '';
+                btn.innerHTML = '<i class="fa-solid fa-file-code"></i><span>' + lt('Config error when open the game') + '</span>';
+                btn.style.background = 'var(--lt-item-bg)';
+                btn.style.borderColor = 'var(--lt-border)';
             }
         }
-
-        // Verifica o estado inicial
         Millennium.callServerMethod('luatools', 'CheckGameTokenStatus', { appid: data.appid, contentScriptQuery: '' })
         .then(function(res){
             const payload = typeof res === 'string' ? JSON.parse(res) : res;
@@ -1319,42 +1514,32 @@
             const btn = configFixSection.querySelector('a');
             setupTokenButtonState(btn, exists);
         });
-
         rightColumn.appendChild(configFixSection);
 
-        // --- BUTTON: ADD/REMOVE DLCs (SLSsteam) ---
+        // 7. DLC MANAGEMENT
         const dlcSection = createFixButton(
             lt('DLC Management'),
-                                           lt('Checking...'), // Texto inicial
-                                           'fa-puzzle-piece', // Ícone de quebra-cabeça para DLC
+                                           lt('Checking...'),
+                                           'fa-puzzle-piece',
                                            null,
                                            function(e) {
                                                e.preventDefault();
                                                const btn = this;
                                                const isRemove = btn.dataset.action === 'remove';
-
-                                               // Animação de carregamento
                                                const originalContent = btn.innerHTML;
                                                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
                                                btn.style.opacity = '0.7';
-
                                                const method = isRemove ? 'RemoveGameDLCs' : 'AddGameDLCs';
-
                                                Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
                                                .then(function(res){
                                                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
-
                                                    btn.innerHTML = originalContent;
                                                    btn.style.opacity = '1';
-
                                                    if (payload && payload.success) {
-                                                       // Sucesso! Inverte o botão
                                                        if (isRemove) {
-                                                           // Virou ADD
                                                            setupDlcButtonState(btn, false);
                                                            ShowLuaToolsAlert('DLCs', lt('DLCs removed from configuration.'));
                                                        } else {
-                                                           // Virou REMOVE
                                                            setupDlcButtonState(btn, true);
                                                            ShowLuaToolsAlert('DLCs', payload.message || lt('DLCs added! Restart Steam to apply.'));
                                                        }
@@ -1369,112 +1554,35 @@
                                                });
                                            }
         );
-
-        // Função auxiliar para mudar o visual do botão Add/Remove
         function setupDlcButtonState(btn, exists) {
             if (exists) {
                 btn.dataset.action = 'remove';
                 btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove DLCs') + '</span>';
-                // Estilo Vermelho para remover
                 btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
                 btn.style.borderColor = 'rgba(255,80,80,0.5)';
+
             } else {
                 btn.dataset.action = 'add';
                 btn.innerHTML = '<i class="fa-solid fa-plus"></i><span>' + lt('Unlock DLCs') + '</span>';
-                // Estilo Padrão (Azul/Verde)
-                btn.style.background = '';
-                btn.style.borderColor = '';
+                btn.style.background = 'var(--lt-item-bg)';
+                btn.style.borderColor = 'var(--lt-border)';
             }
         }
-
-        // Verifica o estado atual ao abrir o menu
         Millennium.callServerMethod('luatools', 'CheckGameDLCsStatus', { appid: data.appid, contentScriptQuery: '' })
         .then(function(res){
             const payload = typeof res === 'string' ? JSON.parse(res) : res;
             const exists = payload && payload.success && payload.exists;
-            // Pega o botão "a" dentro da section criada
             const btn = dlcSection.querySelector('a');
             setupDlcButtonState(btn, exists);
         });
-
-        // Adiciona na coluna da direita (ou esquerda, você escolhe)
         rightColumn.appendChild(dlcSection);
 
-        // --- NEW BUTTON: FIX FAKE APPID (480) ---
-        const fakeIdSection = createFixButton(
-            lt('Online Fix (SLS)'),
-                                              lt('Checking...'), // Texto inicial
-                                              'fa-gamepad',
-                                              null,
-                                              function(e) {
-                                                  e.preventDefault();
-                                                  const btn = this;
-                                                  const isRemove = btn.dataset.action === 'remove';
-                                                  const originalContent = btn.innerHTML;
-
-                                                  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>' + lt('Processing...') + '</span>';
-                                                  btn.style.opacity = '0.7';
-
-                                                  const method = isRemove ? 'RemoveFakeAppId' : 'AddFakeAppId';
-
-                                                  Millennium.callServerMethod('luatools', method, { appid: data.appid, contentScriptQuery: '' })
-                                                  .then(function(res){
-                                                      const payload = typeof res === 'string' ? JSON.parse(res) : res;
-
-                                                      btn.innerHTML = originalContent;
-                                                      btn.style.opacity = '1';
-
-                                                      if (payload && payload.success) {
-                                                          if (isRemove) {
-                                                              setupFakeIdButtonState(btn, false);
-                                                              ShowLuaToolsAlert('Online Fix', lt('FakeAppId removed from config.'));
-                                                          } else {
-                                                              setupFakeIdButtonState(btn, true);
-                                                              ShowLuaToolsAlert('Online Fix', payload.message || lt('FakeAppId added. Restart Steam to apply.'));
-                                                          }
-                                                      } else {
-                                                          ShowLuaToolsAlert('Error', payload.error || 'Unknown error');
-                                                      }
-                                                  })
-                                                  .catch(function(err){
-                                                      btn.innerHTML = originalContent;
-                                                      btn.style.opacity = '1';
-                                                      ShowLuaToolsAlert('Error', err);
-                                                  });
-                                              }
-        );
-
-        function setupFakeIdButtonState(btn, exists) {
-            if (exists) {
-                btn.dataset.action = 'remove';
-                btn.innerHTML = '<i class="fa-solid fa-trash"></i><span>' + lt('Remove FakeAppId') + '</span>';
-                btn.style.background = 'linear-gradient(135deg, rgba(255,80,80,0.2) 0%, rgba(255,80,80,0.1) 100%)';
-                btn.style.borderColor = 'rgba(255,80,80,0.5)';
-            } else {
-                btn.dataset.action = 'add';
-                btn.innerHTML = '<i class="fa-solid fa-gamepad"></i><span>' + lt('Fix FakeAppId (480)') + '</span>';
-                btn.style.background = '';
-                btn.style.borderColor = '';
-            }
-        }
-
-        // Verifica o estado inicial
-        Millennium.callServerMethod('luatools', 'CheckFakeAppIdStatus', { appid: data.appid, contentScriptQuery: '' })
-        .then(function(res){
-            const payload = typeof res === 'string' ? JSON.parse(res) : res;
-            const exists = payload && payload.success && payload.exists;
-            const btn = fakeIdSection.querySelector('a');
-            setupFakeIdButtonState(btn, exists);
-        });
-
-        rightColumn.appendChild(fakeIdSection);
-        // ----------------------------------------
-        // -----------------------------
+        // 8. MANAGE GAME (UN-FIX)
         const unfixSection = createFixButton(
             lt('Manage Game'),
                                              lt('Un-Fix (verify game)'),
                                              'fa-trash',
-                                             null, // ^^
+                                             null,
                                              function(e) {
                                                  e.preventDefault();
                                                  if (isGameInstalled) {
@@ -1486,11 +1594,11 @@
                                                  }
                                              }
         );
-        rightColumn.appendChild(unfixSection);
         if (!isGameInstalled) {
             unfixSection.querySelector('a').style.opacity = '0.5';
             unfixSection.querySelector('a').style.cursor = 'not-allowed';
         }
+        rightColumn.appendChild(unfixSection);
 
         // Credit message
         const creditMsg = document.createElement('div');
@@ -2297,355 +2405,8 @@
             return null;
         }
 
-        // --- NEW FUNCTION: Render API Management Section ---
-        function renderApiManagementSection() {
-            const sectionEl = document.createElement('div');
-            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:var(--lt-bg-container);border:2px solid var(--lt-border);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
 
-            const title = document.createElement('div');
-            title.style.cssText = 'font-size:18px;color:var(--lt-accent);margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
-            title.innerHTML = '<i class="fa-solid fa-key" style="margin-right:10px;"></i>' + t('settings.api.title', 'API & Authentication');
-            sectionEl.appendChild(title);
 
-            // Ryuu Cookie Input
-            const cookieGroup = document.createElement('div');
-            cookieGroup.className = 'luatools-input-group';
-            const cookieLabel = document.createElement('label');
-            cookieLabel.className = 'luatools-input-label';
-            cookieLabel.textContent = t('settings.api.ryuuCookie', 'Ryuu Cookie (Forced Ryu)');
-            const cookieInput = document.createElement('textarea');
-            cookieInput.className = 'luatools-input';
-            cookieInput.rows = 2;
-            cookieInput.placeholder = 'Paste your cookie here...';
-            cookieInput.style.resize = 'vertical';
-
-            const saveCookieBtn = document.createElement('a');
-            saveCookieBtn.className = 'luatools-btn';
-            saveCookieBtn.style.cssText = 'margin-top:8px;padding:8px 16px;font-size:13px;display:inline-block;';
-            saveCookieBtn.innerHTML = '<span>' + t('settings.api.saveCookie', 'Save Cookie') + '</span>';
-            saveCookieBtn.onclick = function(e) {
-                e.preventDefault();
-                const val = cookieInput.value;
-                if (!val) return;
-                saveCookieBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-                Millennium.callServerMethod('luatools', 'SaveRyuuCookie', { cookie: val, contentScriptQuery: '' }).then(function(res){
-                    saveCookieBtn.innerHTML = '<i class="fa-solid fa-check"></i> ' + t('Saved', 'Saved!');
-                    setTimeout(() => { saveCookieBtn.innerHTML = '<span>' + t('settings.api.saveCookie', 'Save Cookie') + '</span>'; cookieInput.value = ''; }, 2000);
-                }).catch(err => {
-                    saveCookieBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + t('Error', 'Error');
-                    alert('Error: ' + err);
-                    setTimeout(() => saveCookieBtn.innerHTML = '<span>' + t('settings.api.saveCookie', 'Save Cookie') + '</span>', 2000);
-                });
-            };
-
-            cookieGroup.appendChild(cookieLabel);
-            cookieGroup.appendChild(cookieInput);
-            cookieGroup.appendChild(saveCookieBtn);
-            sectionEl.appendChild(cookieGroup);
-
-            // Morrenus API Key Input
-            const morrenusGroup = document.createElement('div');
-            morrenusGroup.className = 'luatools-input-group';
-            morrenusGroup.style.marginTop = '16px';
-            const morrenusLabel = document.createElement('label');
-            morrenusLabel.className = 'luatools-input-label';
-            morrenusLabel.textContent = t('settings.api.morrenusKey', 'Morrenus API Key');
-            const morrenusInput = document.createElement('input');
-            morrenusInput.type = 'text';
-            morrenusInput.className = 'luatools-input';
-            morrenusInput.placeholder = 'Paste your API key here...';
-
-            const updateKeyBtn = document.createElement('a');
-            updateKeyBtn.className = 'luatools-btn';
-            updateKeyBtn.style.cssText = 'margin-top:8px;padding:8px 16px;font-size:13px;display:inline-block;';
-            updateKeyBtn.innerHTML = '<span>' + t('settings.api.updateKey', 'Update Key') + '</span>';
-            updateKeyBtn.onclick = function(e) {
-                e.preventDefault();
-                const val = morrenusInput.value;
-                if (!val) return;
-                updateKeyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-                Millennium.callServerMethod('luatools', 'UpdateMorrenusKey', { key: val, contentScriptQuery: '' }).then(function(res){
-                    updateKeyBtn.innerHTML = '<i class="fa-solid fa-check"></i> ' + t('Updated', 'Updated!');
-                    setTimeout(() => { updateKeyBtn.innerHTML = '<span>' + t('settings.api.updateKey', 'Update Key') + '</span>'; morrenusInput.value = ''; }, 2000);
-                }).catch(err => {
-                    updateKeyBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + t('Error', 'Error');
-                    alert('Error: ' + err);
-                    setTimeout(() => updateKeyBtn.innerHTML = '<span>' + t('settings.api.updateKey', 'Update Key') + '</span>', 2000);
-                });
-            };
-
-            morrenusGroup.appendChild(morrenusLabel);
-            morrenusGroup.appendChild(morrenusInput);
-            morrenusGroup.appendChild(updateKeyBtn);
-            sectionEl.appendChild(morrenusGroup);
-
-            contentWrap.appendChild(sectionEl);
-        }
-
-        // --- NEW FUNCTION: Render Workshop Tool Section ---
-        function renderWorkshopSection() {
-            const sectionEl = document.createElement('div');
-            // Usando um tom mais puxado para o Ciano/Verde para diferenciar do Launcher (Roxo)
-            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:linear-gradient(135deg, rgba(20, 60, 70, 0.8) 0%, rgba(15, 45, 55, 0.8) 100%);border:2px solid rgba(100, 220, 240, 0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
-
-            const title = document.createElement('div');
-            title.style.cssText = 'font-size:18px;color:#80f0ff;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
-            title.innerHTML = '<i class="fa-solid fa-download" style="margin-right:10px;"></i>' + t('settings.workshop.title', 'Workshop Downloader Tool');
-            sectionEl.appendChild(title);
-
-            const group = document.createElement('div');
-            group.className = 'luatools-input-group';
-
-            const label = document.createElement('label');
-            label.className = 'luatools-input-label';
-            label.textContent = t('settings.workshop.path', 'DepotDownloader Path (Optional override)');
-
-            // Container para input + botão de pasta
-            const inputContainer = document.createElement('div');
-            inputContainer.style.cssText = 'display:flex; gap:8px; width:100%;';
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'luatools-input';
-            input.placeholder = 'Default: Uses built-in DepotDownloader';
-            input.style.flex = '1';
-
-            // Botão de Procurar (Reaproveitando o BrowseForLauncher pois serve como File Picker genérico)
-            const browseBtn = document.createElement('a');
-            browseBtn.className = 'luatools-btn';
-            browseBtn.style.cssText = 'padding:10px 14px; display:flex; align-items:center; justify-content:center;';
-            browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-            browseBtn.title = 'Browse File';
-
-            browseBtn.onclick = function(e) {
-                e.preventDefault();
-                browseBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-
-                // Usamos o mesmo browser do launcher, pois é um file picker
-                Millennium.callServerMethod('luatools', 'BrowseForLauncher', { contentScriptQuery: '' })
-                .then(function(res) {
-                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-
-                    if (payload && payload.success && payload.path) {
-                        input.value = payload.path;
-                    }
-                })
-                .catch(function(err) {
-                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-                });
-            };
-
-            inputContainer.appendChild(input);
-            inputContainer.appendChild(browseBtn);
-            group.appendChild(label);
-            group.appendChild(inputContainer);
-
-            // Botão Salvar
-            const saveBtn = document.createElement('a');
-            saveBtn.className = 'luatools-btn';
-            saveBtn.style.cssText = 'margin-top:12px;padding:8px 16px;font-size:13px;display:inline-block;';
-            saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>';
-
-            saveBtn.onclick = function(e) {
-                e.preventDefault();
-                const val = input.value;
-
-                saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-                // Chama a NOVA função Python que criamos
-                Millennium.callServerMethod('luatools', 'SaveWorkshopToolPath', { path: val, contentScriptQuery: '' }).then(function(res){
-                    saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> ' + t('Saved', 'Saved!');
-                    setTimeout(() => { saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>'; }, 2000);
-                }).catch(err => {
-                    saveBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + t('Error', 'Error');
-                    setTimeout(() => saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>', 2000);
-                });
-            };
-
-            group.appendChild(saveBtn);
-            sectionEl.appendChild(group);
-
-            // Carregar valor atual ao renderizar
-            Millennium.callServerMethod('luatools', 'GetWorkshopToolPath', { contentScriptQuery: '' })
-            .then(function(res){
-                const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                if (payload && payload.success && payload.path) {
-                    input.value = payload.path;
-                }
-            });
-
-            contentWrap.appendChild(sectionEl);
-        }
-        function renderSLSsteamSection() {
-            const sectionEl = document.createElement('div');
-            // Estilo que contrasta levemente com o roxo do launcher e o azul do workshop
-            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:linear-gradient(135deg, rgba(60, 50, 20, 0.8) 0%, rgba(40, 30, 10, 0.8) 100%);border:2px solid rgba(255, 215, 0, 0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
-
-            const title = document.createElement('div');
-            title.style.cssText = 'font-size:18px;color:#ffd700;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
-            title.innerHTML = '<i class="fa-solid fa-gears" style="margin-right:10px;"></i> SLSsteam Engine Core';
-            sectionEl.appendChild(title);
-
-            const group = document.createElement('div');
-            group.style.cssText = 'display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,0.2); padding:15px; border-radius:10px;';
-
-            const labelInfo = document.createElement('div');
-            labelInfo.innerHTML = '<div style="font-weight:600; color:#fff;">Play Not Owned Games</div><div style="font-size:12px; color:#a9b2c3;">Toggle bypass for unowned titles in config.yaml</div>';
-
-            // Botões no estilo padrão da Steam (iguais aos do Donate Keys)
-            const toggleWrap = document.createElement('div');
-            toggleWrap.style.cssText = 'display:flex;gap:10px;';
-
-            const yesBtn = document.createElement('a');
-            yesBtn.className = 'btnv6_blue_hoverfade btn_small';
-            yesBtn.href = '#';
-            yesBtn.innerHTML = '<span>Yes</span>';
-
-            const noBtn = document.createElement('a');
-            noBtn.className = 'btnv6_blue_hoverfade btn_small';
-            noBtn.href = '#';
-            noBtn.innerHTML = '<span>No</span>';
-
-            function updateUI(isYes) {
-                if (isYes) {
-                    yesBtn.style.background = 'var(--lt-accent)';
-                    yesBtn.querySelector('span').style.color = 'var(--lt-bg-primary)';
-                    noBtn.style.background = '';
-                    noBtn.querySelector('span').style.color = '';
-                } else {
-                    noBtn.style.background = 'var(--lt-accent)';
-                    noBtn.querySelector('span').style.color = 'var(--lt-bg-primary)';
-                    yesBtn.style.background = '';
-                    yesBtn.querySelector('span').style.color = '';
-                }
-            }
-
-            // Ação imediata no clique
-            yesBtn.onclick = function(e) {
-                e.preventDefault();
-                updateUI(true);
-                Millennium.callServerMethod('luatools', 'SetSLSPlayStatus', { enabled: true });
-            };
-
-            noBtn.onclick = function(e) {
-                e.preventDefault();
-                updateUI(false);
-                Millennium.callServerMethod('luatools', 'SetSLSPlayStatus', { enabled: false });
-            };
-
-            // Puxar status atual
-            Millennium.callServerMethod('luatools', 'GetSLSPlayStatus', {}).then(res => {
-                try {
-                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                    updateUI(payload.enabled);
-                } catch(err) {}
-            });
-
-            toggleWrap.appendChild(yesBtn);
-            toggleWrap.appendChild(noBtn);
-            group.appendChild(labelInfo);
-            group.appendChild(toggleWrap);
-            sectionEl.appendChild(group);
-            contentWrap.appendChild(sectionEl);
-        }
-        // --- NEW FUNCTION: Render Launcher Section ---
-        function renderLauncherSection() {
-            const sectionEl = document.createElement('div');
-            sectionEl.style.cssText = 'margin-top:24px;padding:24px;background:linear-gradient(135deg, rgba(50, 20, 60, 0.8) 0%, rgba(40, 20, 50, 0.8) 100%);border:2px solid rgba(180, 100, 240, 0.3);border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
-
-            const title = document.createElement('div');
-            title.style.cssText = 'font-size:18px;color:#d4b3ff;margin-bottom:16px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;';
-
-            // MUDANÇA 1: Título limpo apenas com ACCELA
-            title.innerHTML = '<i class="fa-solid fa-rocket" style="margin-right:10px;"></i>' + t('settings.launcher.title', 'EXTERNAL LAUNCHER (ACCELA)');
-            sectionEl.appendChild(title);
-
-            const group = document.createElement('div');
-            group.className = 'luatools-input-group';
-
-            const label = document.createElement('label');
-            label.className = 'luatools-input-label';
-            label.textContent = t('settings.launcher.path', 'Launcher Executable Path');
-
-            const inputContainer = document.createElement('div');
-            inputContainer.style.cssText = 'display:flex; gap:8px; width:100%;';
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'luatools-input';
-
-            // MUDANÇA 2: Placeholder corrigido (embora no seu código já parecesse estar certo)
-            input.placeholder = '/home/deck/.local/share/ACCELA/run.sh';
-            input.style.flex = '1';
-            // Botão de Procurar (Pasta)
-            const browseBtn = document.createElement('a');
-            browseBtn.className = 'luatools-btn';
-            browseBtn.style.cssText = 'padding:10px 14px; display:flex; align-items:center; justify-content:center;';
-            browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-            browseBtn.title = 'Browse File';
-
-            browseBtn.onclick = function(e) {
-                e.preventDefault();
-                browseBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-
-                Millennium.callServerMethod('luatools', 'BrowseForLauncher', { contentScriptQuery: '' })
-                .then(function(res) {
-                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-
-                    if (payload && payload.success && payload.path) {
-                        input.value = payload.path;
-                    } else if (payload && payload.error) {
-                        // Opcional: mostrar erro se não for cancelamento do usuário
-                        // alert(payload.error);
-                    }
-                })
-                .catch(function(err) {
-                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-                    console.warn(err);
-                });
-            };
-
-            inputContainer.appendChild(input);
-            inputContainer.appendChild(browseBtn);
-            group.appendChild(label);
-            group.appendChild(inputContainer);
-
-            // Botão Salvar
-            const saveBtn = document.createElement('a');
-            saveBtn.className = 'luatools-btn';
-            saveBtn.style.cssText = 'margin-top:12px;padding:8px 16px;font-size:13px;display:inline-block;';
-            saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>';
-
-            saveBtn.onclick = function(e) {
-                e.preventDefault();
-                const val = input.value;
-                if (!val) return;
-
-                saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-                Millennium.callServerMethod('luatools', 'SaveLauncherPath', { path: val, contentScriptQuery: '' }).then(function(res){
-                    saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> ' + t('Saved', 'Saved!');
-                    setTimeout(() => { saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>'; }, 2000);
-                }).catch(err => {
-                    saveBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + t('Error', 'Error');
-                    setTimeout(() => saveBtn.innerHTML = '<span>' + t('settings.api.save', 'Save Path') + '</span>', 2000);
-                });
-            };
-
-            group.appendChild(saveBtn);
-            sectionEl.appendChild(group);
-
-            // Carregar valor atual ao renderizar
-            Millennium.callServerMethod('luatools', 'GetLauncherPath', { contentScriptQuery: '' })
-            .then(function(res){
-                const payload = typeof res === 'string' ? JSON.parse(res) : res;
-                if (payload && payload.success && payload.path) {
-                    input.value = payload.path;
-                }
-            });
-
-            contentWrap.appendChild(sectionEl);
-        }
 
         function renderSettings() {
             contentWrap.innerHTML = '';
@@ -2668,7 +2429,7 @@
                 const groupTitle = document.createElement('div');
                 groupTitle.textContent = t('settings.' + group.key, group.label || group.key);
                 if (group.key === 'general') {
-                    groupTitle.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;margin-top:-25px;font-weight:600;text-align:center;'; // dw abt this margin-top -25px 🇧🇷 don't even look at it
+                    groupTitle.style.cssText = 'font-size:22px;color:#fff;margin-bottom:16px;margin-top:-25px;font-weight:600;text-align:center;';
                 } else {
                     groupTitle.style.cssText = 'font-size:15px;font-weight:600;color:var(--lt-accent);text-align:center;';
                 }
@@ -2744,7 +2505,6 @@
                             updateSaveState();
                             setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
 
-                            // Live-preview theme changes immediately
                             if (isDynamicTheme) {
                                 try {
                                     if (!window.__LuaToolsSettings) window.__LuaToolsSettings = {};
@@ -2759,67 +2519,135 @@
                         controlWrap.appendChild(selectEl);
                     } else if (option.type === 'toggle') {
                         const toggleWrap = document.createElement('div');
-                        toggleWrap.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;';
 
-                        let yesLabel = option.metadata && option.metadata.yesLabel ? String(option.metadata.yesLabel) : 'Yes';
-                        let noLabel = option.metadata && option.metadata.noLabel ? String(option.metadata.noLabel) : 'No';
-                        if (group.key === 'general' && option.key === 'donateKeys') {
-                            yesLabel = t('settings.donateKeys.yes', yesLabel);
-                            noLabel = t('settings.donateKeys.no', noLabel);
-                        }
+                        if (option.metadata && option.metadata.style === 'switch') {
+                            toggleWrap.style.cssText = 'display:flex; align-items:center; justify-content:space-between; width:100%; padding:15px; background:rgba(0,0,0,0.2); border-radius:10px; margin-bottom: 8px;';
 
-                        const yesBtn = document.createElement('a');
-                        yesBtn.className = 'btnv6_blue_hoverfade btn_small';
-                        yesBtn.href = '#';
-                        yesBtn.innerHTML = '<span>' + yesLabel + '</span>';
+                            const labelInfo = document.createElement('div');
+                            labelInfo.innerHTML = '<div style="font-weight:600; color:var(--lt-text);">' + (option.label || option.key) + '</div>' +
+                            '<div style="font-size:12px; color:var(--lt-text-secondary);">' + option.description + '</div>';
 
-                        const noBtn = document.createElement('a');
-                        noBtn.className = 'btnv6_blue_hoverfade btn_small';
-                        noBtn.href = '#';
-                        noBtn.innerHTML = '<span>' + noLabel + '</span>';
+                            const switchLabel = document.createElement('label');
+                            switchLabel.className = 'lt-switch';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            const slider = document.createElement('span');
+                            slider.className = 'lt-slider';
 
-                        const yesSpan = yesBtn.querySelector('span');
-                        const noSpan = noBtn.querySelector('span');
+                            checkbox.checked = state.draft[group.key][option.key] === true;
 
-                        function refreshToggleButtons() {
-                            const currentValue = state.draft[group.key][option.key] === true;
-                            if (currentValue) {
-                                yesBtn.style.background = 'var(--lt-accent)';
-                                yesBtn.style.color = 'var(--lt-bg-primary)';
-                                if (yesSpan) yesSpan.style.color = 'var(--lt-bg-primary)';
-                                noBtn.style.background = '';
-                                noBtn.style.color = '';
-                                if (noSpan) noSpan.style.color = '';
-                            } else {
-                                noBtn.style.background = 'var(--lt-accent)';
-                                noBtn.style.color = 'var(--lt-bg-primary)';
-                                if (noSpan) noSpan.style.color = 'var(--lt-bg-primary)';
-                                yesBtn.style.background = '';
-                                yesBtn.style.color = '';
-                                if (yesSpan) yesSpan.style.color = '';
+                            checkbox.addEventListener('change', function() {
+                                state.draft[group.key][option.key] = this.checked;
+                                updateSaveState();
+                                setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
+                            });
+
+                            switchLabel.appendChild(checkbox);
+                            switchLabel.appendChild(slider);
+                            toggleWrap.appendChild(labelInfo);
+                            toggleWrap.appendChild(switchLabel);
+                            controlWrap.appendChild(toggleWrap);
+                        } else {
+                            toggleWrap.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;';
+
+                            let yesLabel = option.metadata && option.metadata.yesLabel ? String(option.metadata.yesLabel) : 'Yes';
+                            let noLabel = option.metadata && option.metadata.noLabel ? String(option.metadata.noLabel) : 'No';
+
+                            const yesBtn = document.createElement('a');
+                            yesBtn.className = 'btnv6_blue_hoverfade btn_small';
+                            yesBtn.href = '#';
+                            yesBtn.innerHTML = '<span>' + yesLabel + '</span>';
+
+                            const noBtn = document.createElement('a');
+                            noBtn.className = 'btnv6_blue_hoverfade btn_small';
+                            noBtn.href = '#';
+                            noBtn.innerHTML = '<span>' + noLabel + '</span>';
+
+                            function refreshToggleButtons() {
+                                const currentValue = state.draft[group.key][option.key] === true;
+                                if (currentValue) {
+                                    yesBtn.style.background = 'var(--lt-accent)'; yesBtn.style.color = 'var(--lt-bg-primary)';
+                                    noBtn.style.background = ''; noBtn.style.color = '';
+                                } else {
+                                    noBtn.style.background = 'var(--lt-accent)'; noBtn.style.color = 'var(--lt-bg-primary)';
+                                    yesBtn.style.background = ''; yesBtn.style.color = '';
+                                }
                             }
+
+                            yesBtn.addEventListener('click', function(e){
+                                e.preventDefault();
+                                state.draft[group.key][option.key] = true;
+                                refreshToggleButtons(); updateSaveState();
+                                setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
+                            });
+
+                            noBtn.addEventListener('click', function(e){
+                                e.preventDefault();
+                                state.draft[group.key][option.key] = false;
+                                refreshToggleButtons(); updateSaveState();
+                                setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
+                            });
+
+                            toggleWrap.appendChild(yesBtn);
+                            toggleWrap.appendChild(noBtn);
+                            controlWrap.appendChild(toggleWrap);
+                            refreshToggleButtons();
+                        }
+                    } else if (option.type === 'text' || option.type === 'textarea') {
+                        const isTextarea = option.type === 'textarea';
+                        const inputEl = document.createElement(isTextarea ? 'textarea' : 'input');
+                        if (!isTextarea) inputEl.type = 'text';
+                        if (isTextarea) {
+                            inputEl.rows = 2;
+                            inputEl.style.resize = 'vertical';
                         }
 
-                        yesBtn.addEventListener('click', function(e){
-                            e.preventDefault();
-                            state.draft[group.key][option.key] = true;
-                            refreshToggleButtons();
+                        inputEl.className = 'luatools-input';
+                        inputEl.placeholder = option.description || '';
+
+                        const currentValue = state.draft[group.key][option.key];
+                        if (typeof currentValue !== 'undefined') {
+                            inputEl.value = String(currentValue);
+                        }
+
+                        inputEl.addEventListener('input', function() {
+                            state.draft[group.key][option.key] = inputEl.value;
                             updateSaveState();
                             setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
                         });
 
-                        noBtn.addEventListener('click', function(e){
-                            e.preventDefault();
-                            state.draft[group.key][option.key] = false;
-                            refreshToggleButtons();
-                            updateSaveState();
-                            setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
-                        });
+                        if (option.metadata && option.metadata.browseButton) {
+                            const wrap = document.createElement('div');
+                            wrap.style.cssText = 'display:flex; gap:8px; width:100%;';
+                            inputEl.style.flex = '1';
 
-                        toggleWrap.appendChild(yesBtn);
-                        toggleWrap.appendChild(noBtn);
-                        controlWrap.appendChild(toggleWrap);
-                        refreshToggleButtons();
+                            const browseBtn = document.createElement('a');
+                            browseBtn.className = 'luatools-btn';
+                            browseBtn.style.cssText = 'padding:10px 14px; display:flex; align-items:center; justify-content:center;';
+                            browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
+                            browseBtn.onclick = function(e) {
+                                e.preventDefault();
+                                browseBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                                Millennium.callServerMethod('luatools', 'BrowseForLauncher', { contentScriptQuery: '' })
+                                .then(function(res) {
+                                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
+                                    const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                                    if (payload && payload.success && payload.path) {
+                                        inputEl.value = payload.path;
+                                        state.draft[group.key][option.key] = payload.path;
+                                        updateSaveState();
+                                        setStatus(t('settings.unsaved', 'Unsaved changes'), 'var(--lt-text-secondary)');
+                                    }
+                                }).catch(function() {
+                                    browseBtn.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
+                                });
+                            };
+                            wrap.appendChild(inputEl);
+                            wrap.appendChild(browseBtn);
+                            controlWrap.appendChild(wrap);
+                        } else {
+                            controlWrap.appendChild(inputEl);
+                        }
                     } else {
                         const unsupported = document.createElement('div');
                         unsupported.style.cssText = 'font-size:12px;color:#ffb347;';
@@ -2833,12 +2661,6 @@
 
                 contentWrap.appendChild(groupEl);
             }
-
-            // === INSERT NEW API SECTION HERE ===
-            renderSLSsteamSection();
-            renderLauncherSection(); // <--- INSERTED HERE
-            renderWorkshopSection();
-            renderApiManagementSection();
 
             // Render Installed Fixes section
             renderInstalledFixesSection();
@@ -3890,9 +3712,68 @@
         }, 500);
     }
 
-    // AQUI EM BAIXO DEVE ESTAR A LINHA ORIGINAL:
-    // function addLuaToolsButton() { ...
+    // --- NOVO: Botão global para a Home Page / Header ---
+    function addGlobalHeaderButton() {
+        // Verifica se NÃO estamos na página de um jogo
+        if (window.location.pathname.includes('/app/')) return;
 
+        // Seletores para achar a barra de navegação principal da Steam
+        const headerContainer = document.querySelector('._1wn1lBlAzl3HMRqS1llwie') ||
+        document.querySelector('.supernav_container') ||
+        document.querySelector('#store_nav_area') ||
+        document.querySelector('.store_nav');
+
+        if (headerContainer && !document.querySelector('.luatools-header-button')) {
+            const headerBtn = document.createElement('a');
+            // A mágica acontece aqui: usamos exatamente as mesmas classes do botão das páginas dos jogos
+            headerBtn.className = 'btnv6_blue_hoverfade btn_medium luatools-icon-button luatools-header-button';
+            headerBtn.href = '#';
+            headerBtn.title = 'LuaTools Helper';
+            headerBtn.setAttribute('data-tooltip-text', 'LuaTools Helper');
+
+            // Centraliza o botão dentro da barra superior da Steam
+            headerBtn.style.cssText = 'margin-left: 8px; margin-right: 8px; align-self: center; text-decoration: none;';
+
+            const ispan = document.createElement('span');
+            ispan.style.display = 'inline-flex';
+            ispan.style.alignItems = 'center';
+            ispan.style.justifyContent = 'center';
+
+            const img = document.createElement('img');
+            img.style.height = '16px';
+            img.style.width = '16px';
+            img.style.verticalAlign = 'middle';
+
+            try {
+                Millennium.callServerMethod('luatools', 'GetIconDataUrl', { contentScriptQuery: '' }).then(function(res){
+                    try {
+                        const payload = typeof res === 'string' ? JSON.parse(res) : res;
+                        img.src = (payload && payload.success && payload.dataUrl) ? payload.dataUrl : 'LuaTools/luatools-icon.png';
+                    } catch(_) { img.src = 'LuaTools/luatools-icon.png'; }
+                });
+            } catch(_) { img.src = 'LuaTools/luatools-icon.png'; }
+
+            img.onerror = function(){
+                ispan.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm9.94 3.06l-2.12-.35a7.962 7.962 0 00-1.02-2.46l1.29-1.72a.75.75 0 00-.09-.97l-1.41-1.41a.75.75 0 00-.97-.09l-1.72 1.29c-.77-.44-1.6-.78-2.46-1.02L13.06 2.06A.75.75 0 0012.31 2h-1.62a.75.75 0 00-.75.65l-.35 2.12a7.962 7.962 0 00-2.46 1.02L5 4.6a.75.75 0 00-.97.09L2.62 6.1a.75.75 0 00-.09.97l1.29 1.72c-.44.77-.78 1.6-1.02 2.46l-2.12.35a.75.75 0 00-.65.75v1.62c0 .37.27.69.63.75l2.14.36c.24.86.58 1.69 1.02 2.46L2.53 18a.75.75 0 00.09.97l1.41 1.41c.26.26.67.29.97.09l1.72-1.29c.77.44 1.6.78 2.46 1.02l.35 2.12c.06.36.38.63.75.63h1.62c.37 0 .69-.27.75-.63l.36-2.14c.86-.24 1.69-.58 2.46-1.02l1.72 1.29c.3.2.71.17.97-.09l1.41-1.41c.26-.26.29-.67.09-.97l-1.29-1.72c.44-.77.78-1.6 1.02-2.46l2.12-.35c.36-.06.63-.38.63-.75v-1.62a.75.75 0 00-.65-.75z"/></svg>';
+            };
+
+            ispan.appendChild(img);
+            headerBtn.appendChild(ispan);
+
+            headerBtn.onclick = function(e) {
+                e.preventDefault();
+                showSettingsPopup();
+            };
+
+            headerContainer.appendChild(headerBtn);
+        }
+    }
+
+    // [ANTI-DELAY] Força verificações ultra-rápidas para o botão aparecer instantaneamente
+    const headerFastPoller = setInterval(addGlobalHeaderButton, 150);
+    setTimeout(() => clearInterval(headerFastPoller), 10000); // Encerra a checagem forçada após 10s
+    // ----------------------------------------------------
+    // ----------------------------------------------------
     // (A primeira definição antiga foi removida daqui)
 
     // Try to add the button immediately if DOM is ready
@@ -3915,6 +3796,7 @@
 
         addLuaToolsButton();
         addWorkshopButton();
+        addGlobalHeaderButton();
         // Ask backend if there is a queued startup message from InitApis
         try {
             if (typeof Millennium !== 'undefined' && typeof Millennium.callServerMethod === 'function') {
@@ -3929,8 +3811,8 @@
                             if (isUpdateMsg) {
                                 // For update messages, use confirm dialog with OK (restart) and Cancel options
                                 showLuaToolsConfirm('LuaTools', msg, function() {
-                                    // User clicked Confirm - restart Steam
-                                    try { Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' }); } catch(_) {}
+                                    // User clicked Confirm - restart Steam gracefully
+                                    performSteamRestart();
                                 }, function() {
                                     // User clicked Cancel - do nothing (just closes dialog)
                                 });
@@ -4354,7 +4236,7 @@
 
                     restartBtn.addEventListener('click', function(e){
                         e.preventDefault();
-                        try { closeSettingsOverlay(); showLuaToolsConfirm('LuaTools', lt('Restart Steam now?'), function() { try { Millennium.callServerMethod('luatools', 'RestartSteam', { contentScriptQuery: '' }); } catch(_) {} }, function() {}); } catch(_) {}
+                        try { closeSettingsOverlay(); showLuaToolsConfirm('LuaTools', lt('Restart Steam now?'), function() { performSteamRestart(); }, function() {}); } catch(_) {}
                     });
 
                     if (referenceBtn && referenceBtn.parentElement) referenceBtn.after(restartBtn);
@@ -4480,6 +4362,1020 @@
             if (!logState.missingOnce) { backendLog('LuaTools: steamdbContainer not found'); logState.missingOnce = true; }
         }
     }
+    // --- Context Menu Injection (Store "..." button menus) ---
+    let lastInteractedAppId = NaN;
 
+    function _toValidAppId(value) {
+        var num = parseInt(value, 10);
+        return Number.isFinite(num) && num > 0 ? num : NaN;
+    }
+
+    function _extractAppIdFromHref(href) {
+        if (!href || typeof href !== 'string') return NaN;
+        var match = href.match(/\/app\/(\d+)/);
+        return match ? _toValidAppId(match[1]) : NaN;
+    }
+
+    function resolveAppIdFromNode(node) {
+        var current = node;
+        var depth = 0;
+        while (current && current !== document && depth++ < 12) {
+            try {
+                if (current.dataset) {
+                    if (current.dataset.dsAppid) {
+                        var dsId = _toValidAppId(current.dataset.dsAppid);
+                        if (!isNaN(dsId)) return dsId;
+                    }
+                    if (current.dataset.appid) {
+                        var appIdData = _toValidAppId(current.dataset.appid);
+                        if (!isNaN(appIdData)) return appIdData;
+                    }
+                    if (current.dataset.dsAppidList) {
+                        var first = String(current.dataset.dsAppidList).split(',')[0];
+                        var listId = _toValidAppId(first);
+                        if (!isNaN(listId)) return listId;
+                    }
+                }
+                if (current.href) {
+                    var hrefId = _extractAppIdFromHref(current.href);
+                    if (!isNaN(hrefId)) return hrefId;
+                }
+                if (typeof current.getAttribute === 'function') {
+                    var attrHref = current.getAttribute('href');
+                    var attrId = _extractAppIdFromHref(attrHref);
+                    if (!isNaN(attrId)) return attrId;
+                }
+                if (typeof current.querySelector === 'function') {
+                    var linked = current.querySelector('a[href*="/app/"]');
+                    if (linked && linked.href) {
+                        var linkedId = _extractAppIdFromHref(linked.href);
+                        if (!isNaN(linkedId)) return linkedId;
+                    }
+                }
+            } catch (_) {}
+            current = current.parentNode;
+        }
+        return NaN;
+    }
+
+    function resolveAppIdForInteraction(node, allowPageFallback) {
+        var resolved = resolveAppIdFromNode(node);
+        if (!isNaN(resolved)) return resolved;
+
+        if (!isNaN(lastInteractedAppId)) return lastInteractedAppId;
+        if (!isNaN(window.__LuaToolsCurrentAppId)) return window.__LuaToolsCurrentAppId;
+
+        if (allowPageFallback) {
+            var urlMatch = window.location.href.match(/\/app\/(\d+)/);
+            if (urlMatch) return _toValidAppId(urlMatch[1]);
+        }
+        return NaN;
+    }
+
+    function isLikelyStoreGamePopup(el) {
+        try {
+            if (!el || !el.getBoundingClientRect) return false;
+            var rect = el.getBoundingClientRect();
+            if (rect.width < 180 || rect.width > 980 || rect.height < 100 || rect.height > 980) return false;
+            var style = window.getComputedStyle(el);
+            var isPositioned = style.position === 'absolute' || style.position === 'fixed';
+            var hasZ = parseInt(style.zIndex, 10) > 0;
+            if (!isPositioned && !hasZ) return false;
+            if (el.querySelector('.luatools-hover-btn')) return false;
+            if (el.textContent && (el.textContent.indexOf('Unlocked') !== -1 || (el.className || '').toLowerCase().indexOf('achievement') !== -1)) return false;
+            var hasAppEvidence = !isNaN(resolveAppIdFromNode(el));
+            var hasMedia = !!(el.querySelector('.hover_screenshots') || el.querySelector('img[src*="capsule"]') || el.querySelector('img[src*="library"]'));
+            var hasTopControls = !!findTopRightControlAnchor(el);
+            return hasAppEvidence && (hasMedia || hasTopControls);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function findTopRightControlAnchor(popup) {
+        if (!popup || !popup.querySelectorAll) return null;
+        var candidates = popup.querySelectorAll('button, [role="button"], a, div');
+        var popupRect = popup.getBoundingClientRect();
+        var topBand = Math.max(90, popupRect.height * 0.35);
+        for (var i = 0; i < candidates.length; i++) {
+            var node = candidates[i];
+            if (!node || node === popup || node.classList && node.classList.contains('luatools-hover-btn')) continue;
+            var rect = node.getBoundingClientRect();
+            if (rect.width < 16 || rect.width > 80 || rect.height < 16 || rect.height > 80) continue;
+            if ((rect.top - popupRect.top) < -2 || (rect.top - popupRect.top) > topBand) continue;
+            if ((popupRect.right - rect.right) < -6 || (popupRect.right - rect.right) > Math.max(220, popupRect.width * 0.5)) continue;
+            if (node.querySelector && node.querySelector('svg')) return node;
+            var text = (node.textContent || '').trim();
+            if (!text || text.length <= 3) return node;
+        }
+        return null;
+    }
+
+    // Track AppID from any click interaction
+    document.addEventListener('mousedown', function(e) {
+        if (e.button !== 0 && e.button !== 2) return;
+        var resolved = resolveAppIdForInteraction(e.target, true);
+        if (!isNaN(resolved)) lastInteractedAppId = resolved;
+        // After a click, poll for visible menus to inject into
+        setTimeout(findAndInjectIntoVisibleMenus, 80);
+        setTimeout(findAndInjectIntoVisibleMenus, 250);
+        setTimeout(findAndInjectIntoVisibleMenus, 500);
+    }, true);
+
+    // Also observe DOM additions
+    try {
+        var ctxObserver = new MutationObserver(function(mutations) {
+            setTimeout(findAndInjectIntoVisibleMenus, 30);
+            // Also check for hover popups
+            setTimeout(findAndInjectIntoHoverPopups, 50);
+        });
+        ctxObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
+
+    // Some Steam hover cards are reused without creating new DOM nodes.
+    // Trigger lightweight scans while hovering so LT injection stays consistent.
+    var hoverScanScheduled = false;
+    document.addEventListener('mouseover', function() {
+        if (hoverScanScheduled) return;
+        hoverScanScheduled = true;
+        setTimeout(function() {
+            hoverScanScheduled = false;
+            findAndInjectIntoHoverPopups();
+        }, 40);
+    }, true);
+
+    // --- Hover Popup LuaTools Button ---
+    // Detect Steam Store hover popups (game info cards) and inject a LuaTools button
+    // These popups have: a game link (/app/NNNNN), a wishlist button, price, tags, etc.
+    function findAndInjectIntoHoverPopups() {
+        var allNodes = document.querySelectorAll('div, section, article');
+        for (var i = 0; i < allNodes.length; i++) {
+            var node = allNodes[i];
+            if (!isLikelyStoreGamePopup(node)) continue;
+
+            var popup = findHoverPopupContainer(node);
+            if (!popup) continue;
+            if (popup.querySelector('.luatools-hover-btn')) continue;
+
+            var popupAppId = resolveAppIdForInteraction(popup, false);
+            if (isNaN(popupAppId)) continue;
+
+            var wishlistBtn = findWishlistButton(popup);
+
+            injectHoverButton(popup, wishlistBtn, popupAppId);
+        }
+    }
+    
+    function findHoverPopupContainer(el) {
+        // Walk up the DOM to find a container that looks like a hover popup:
+        // - Positioned (absolute/fixed) or has elevated z-index
+        // - Medium-sized (not too small, not full page)
+        var current = el;
+        var maxDepth = 10;
+        while (current && current !== document.body && maxDepth-- > 0) {
+            var style = window.getComputedStyle(current);
+            var rect = current.getBoundingClientRect();
+            
+            // Check if it's a floating popup-like container
+            var isPositioned = style.position === 'absolute' || style.position === 'fixed';
+            var hasZIndex = parseInt(style.zIndex) > 0;
+            
+            // Must be a reasonable popup size (not tiny, not full page)
+            // Steam store hover popups are usually > 300px wide and > 200px tall
+            // Achievement tooltips are much smaller
+            var goodSize = rect.width > 180 && rect.width < 980 && rect.height > 100 && rect.height < 980;
+            
+            if ((isPositioned || hasZIndex) && goodSize) {
+                // To avoid crashing achievements or other tooltips, stricter check:
+                // Steam Store hover popups have a specific class "store_hover_item" or similar, 
+                // or contain specific elements like a price or a wishlist block.
+                var isStoreHover = current.className && (current.className.indexOf('hover') !== -1 || current.className.indexOf('popup') !== -1);
+                var hasPriceOrApp = current.querySelector('.discount_block') || current.querySelector('.match_price') || current.querySelector('a[href*="/app/"]');
+                var hasScreenshots = current.querySelector('.hover_screenshots') || current.querySelector('img[src*="capsule"]') || current.querySelector('img[src*="library"]');
+                
+                // If it's just a tiny tooltip (like an achievement), don't touch it
+                var isAchievement = current.textContent.indexOf('Unlocked') !== -1 || current.className.indexOf('achievement') !== -1;
+
+                var appEvidence = !isNaN(resolveAppIdFromNode(current));
+                if (!isAchievement && appEvidence && (isStoreHover || (hasPriceOrApp && hasScreenshots) || findTopRightControlAnchor(current))) {
+                    return current;
+                }
+            }
+            current = current.parentNode;
+        }
+        return null;
+    }
+    
+    function findWishlistButton(popup) {
+        var topRightAnchor = findTopRightControlAnchor(popup);
+        if (topRightAnchor) return topRightAnchor;
+
+        // The wishlist button is typically a small interactive element near the top of the popup
+        // It usually contains an SVG (star icon) or is a small button/div
+        // Look for elements with SVG children that are small and positioned near the top-right
+        
+        // Strategy 1: Find SVG elements (star icons)
+        var svgs = popup.querySelectorAll('svg');
+        for (var i = 0; i < svgs.length; i++) {
+            var svg = svgs[i];
+            var parent = svg.parentNode;
+            if (parent && parent !== popup) {
+                var rect = parent.getBoundingClientRect();
+                var popupRect = popup.getBoundingClientRect();
+                // Wishlist icon is typically near the top-right area
+                if (rect.width < 60 && rect.height < 60 && 
+                    rect.top - popupRect.top < popupRect.height * 0.4) {
+                    return parent;
+                }
+            }
+        }
+        
+        // Strategy 2: Look for small button-like elements near the top
+        var buttons = popup.querySelectorAll('button, [role="button"]');
+        for (var i = 0; i < buttons.length; i++) {
+            var btn = buttons[i];
+            var rect = btn.getBoundingClientRect();
+            var popupRect = popup.getBoundingClientRect();
+            if (rect.width < 60 && rect.height < 60 &&
+                rect.top - popupRect.top < popupRect.height * 0.3) {
+                return btn;
+            }
+        }
+        
+        return null;
+    }
+    
+    function injectHoverButton(popup, wishlistBtn, appid) {
+        if (isNaN(appid)) return;
+
+        // Create a LuaTools button styled to match the popup aesthetic
+        var btn = document.createElement('div');
+        btn.className = 'luatools-hover-btn';
+        btn.title = lt('Get via LuaTools');
+        btn.style.cssText = [
+            'cursor: pointer',
+            'display: inline-flex',
+            'align-items: center',
+            'justify-content: center',
+            'width: 30px',
+            'height: 30px',
+            'border-radius: 4px',
+            'background: rgba(0,0,0,0.5)',
+            'color: #67c1f5',
+            'font-size: 14px',
+            'font-weight: bold',
+            'margin-left: 4px',
+            'position: relative',
+            'z-index: 10',
+            'transition: background 0.15s, color 0.15s',
+            'user-select: none'
+        ].join(';') + ';';
+        
+        // Use "LT" text as the icon
+        btn.textContent = 'LT';
+        
+        btn.onmouseover = function() {
+            this.style.background = 'rgba(103,193,245,0.3)';
+            this.style.color = '#fff';
+        };
+        btn.onmouseout = function() {
+            this.style.background = 'rgba(0,0,0,0.5)';
+            this.style.color = '#67c1f5';
+        };
+        
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isNaN(appid)) {
+                if (runState.inProgress && runState.appid === appid) return;
+                runState.inProgress = true; runState.appid = appid;
+                if (typeof showTestPopup === "function") showTestPopup();
+                Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appid, contentScriptQuery: '' });
+                if (typeof startPolling === "function") startPolling(appid);
+            }
+        });
+        
+        // Position the button next to the top-right wishlist/favorite controls
+        var wishlistParent = wishlistBtn && wishlistBtn.parentNode ? wishlistBtn.parentNode : null;
+        if (wishlistParent && wishlistBtn) {
+            // Ensure the parent can lay out side-by-side
+            var parentStyle = window.getComputedStyle(wishlistParent);
+            if (parentStyle.display !== 'flex' && parentStyle.display !== 'inline-flex') {
+                wishlistParent.style.display = 'flex';
+                wishlistParent.style.alignItems = 'center';
+                wishlistParent.style.gap = '4px';
+            }
+            // Insert after the wishlist button
+            if (wishlistBtn.nextSibling) {
+                wishlistParent.insertBefore(btn, wishlistBtn.nextSibling);
+            } else {
+                wishlistParent.appendChild(btn);
+            }
+        } else {
+            var popupStyle = window.getComputedStyle(popup);
+            if (!popupStyle || popupStyle.position === 'static') popup.style.position = 'relative';
+            btn.style.position = 'absolute';
+            btn.style.top = '8px';
+            btn.style.right = '8px';
+            btn.style.marginLeft = '0';
+            popup.appendChild(btn);
+        }
+        
+        backendLog('LuaTools: Injected hover popup button for appid=' + appid + ' source=hover');
+    }
+
+    function findAndInjectIntoVisibleMenus() {
+        // Strategy: detect Steam Store "..." dropdown menus by STRUCTURE, not text.
+        // These menus have exactly 3 clickable child items (wishlist, ignore, store prefs)
+        // and appear as small popup containers after clicking near game capsules.
+        // This approach works across all Steam client languages.
+        var allElements = document.querySelectorAll('div, ul, menu, nav, section');
+        for (var i = 0; i < allElements.length; i++) {
+            var el = allElements[i];
+            // Skip if hidden
+            if (el.offsetParent === null && el !== document.body) continue;
+            if (el.querySelector('.luatools-ctx-menu-item')) continue;
+            
+            if (isStoreDropdownMenu(el)) {
+                var menuContainer = findMenuContainer(el);
+                if (menuContainer && !menuContainer.querySelector('.luatools-ctx-menu-item')) {
+                    var resolvedForMenu = resolveAppIdForInteraction(menuContainer, false);
+                    if (!isNaN(resolvedForMenu)) injectItems(menuContainer, resolvedForMenu);
+                }
+            }
+        }
+    }
+
+    function isStoreDropdownMenu(el) {
+        // A Steam Store "..." dropdown menu is identified structurally:
+        // - Small container rendered as a popup/dropdown
+        // - Contains exactly 3 clickable child items
+        // - Each child is a simple text element (no complex nested content)
+        // - The container is relatively small (not a full page section)
+        var children = el.children;
+        if (!children) return false;
+        
+        // Get direct clickable children (divs or spans that act as menu items)
+        var clickableChildren = [];
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+            var tag = child.tagName;
+            if (!tag) continue;
+            tag = tag.toLowerCase();
+            // Menu items are typically div, a, button, li, or span
+            if (tag === 'div' || tag === 'a' || tag === 'button' || tag === 'li' || tag === 'span') {
+                var text = (child.textContent || '').trim();
+                // Each menu item should have short text (not a complex section)
+                if (text.length > 0 && text.length < 50 && child.children.length <= 2) {
+                    clickableChildren.push(child);
+                }
+            }
+        }
+        
+        // Steam Store "..." dropdown has exactly 3 items
+        if (clickableChildren.length !== 3) return false;
+        
+        // The container should be relatively small (a popup, not a page section)
+        var rect = el.getBoundingClientRect();
+        if (rect.width > 400 || rect.height > 300) return false;
+        if (rect.width < 50 || rect.height < 30) return false;
+        
+        // Check that it looks like a floating/popup menu (has some positioning or overlay styling)
+        var style = window.getComputedStyle(el);
+        var parentStyle = el.parentNode ? window.getComputedStyle(el.parentNode) : null;
+        var isPopup = style.position === 'absolute' || style.position === 'fixed' ||
+                      style.zIndex > 1 ||
+                      (parentStyle && (parentStyle.position === 'absolute' || parentStyle.position === 'fixed' || parentStyle.zIndex > 1));
+        
+        // Also accept if we recently clicked near a game capsule (lastInteractedAppId is set)
+        if (!isPopup && isNaN(lastInteractedAppId)) return false;
+
+        // Require game context to avoid injecting into unrelated popup menus
+        var menuAppId = resolveAppIdForInteraction(el, false);
+        if (isNaN(menuAppId) && isNaN(lastInteractedAppId)) return false;
+        
+        return true;
+    }
+    
+    function findMenuContainer(el) {
+        var children = el.children;
+        if (!children || children.length === 0) return el;
+        
+        // Recurse into child that contains all the menu items
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+            if (isStoreDropdownMenu(child)) {
+                return findMenuContainer(child);
+            }
+        }
+        return el;
+    }
+
+    function injectItems(container, appidOverride) {
+        var appid = !isNaN(appidOverride) ? appidOverride : resolveAppIdForInteraction(container, false);
+        if (isNaN(appid)) appid = resolveAppIdForInteraction(container, true);
+        if (isNaN(appid)) return;
+        
+        // Find a reference item for styling (use the first child that looks like a menu item)
+        var refItem = null;
+        var children = container.children;
+        for (var i = 0; i < children.length; i++) {
+            var ct = (children[i].textContent || '').trim();
+            if (ct.length > 0 && ct.length < 50) {
+                refItem = children[i];
+                break;
+            }
+        }
+
+        // Create separator
+        var sep = document.createElement('div');
+        sep.className = 'luatools-ctx-menu-item';
+        sep.style.cssText = 'height:1px; background:rgba(255,255,255,0.1); margin:4px 0;';
+
+        // Create "Get via LuaTools" button
+        var getBtn = document.createElement('div');
+        getBtn.className = 'luatools-ctx-menu-item';
+        if (refItem) {
+            var cs = window.getComputedStyle(refItem);
+            getBtn.style.cssText = 'cursor:pointer; padding:' + cs.paddingTop + ' ' + cs.paddingRight + ' ' + cs.paddingBottom + ' ' + cs.paddingLeft + '; font-size:' + cs.fontSize + '; color:' + cs.color + '; font-family:' + cs.fontFamily + '; line-height:' + cs.lineHeight + ';';
+        } else {
+            getBtn.style.cssText = 'cursor:pointer; padding:6px 16px; font-size:13px; color:#b8bcbf;';
+        }
+        getBtn.textContent = lt('Get via LuaTools');
+        getBtn.onmouseover = function() { this.style.backgroundColor = 'rgba(255,255,255,0.1)'; this.style.color = '#fff'; };
+        getBtn.onmouseout = function() { this.style.backgroundColor = 'transparent'; this.style.color = refItem ? window.getComputedStyle(refItem).color : '#b8bcbf'; };
+        
+        getBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Close the menu
+            var p = container;
+            while (p && p !== document.body) {
+                if (p.style) p.style.display = 'none';
+                if (p.parentNode && p.parentNode !== document.body && p.parentNode.children && p.parentNode.children.length <= 3) {
+                    p = p.parentNode;
+                } else { break; }
+            }
+            if (!isNaN(appid)) {
+                if (runState.inProgress && runState.appid === appid) return;
+                runState.inProgress = true; runState.appid = appid;
+                if (typeof showTestPopup === "function") showTestPopup();
+                Millennium.callServerMethod('luatools', 'StartAddViaLuaTools', { appid: appid, contentScriptQuery: '' });
+                if (typeof startPolling === "function") startPolling(appid);
+                backendLog('LuaTools: Context menu trigger appid=' + appid + ' source=context-menu');
+            }
+        });
+
+        // Create "LuaTools Menu" button
+        var menuBtn = document.createElement('div');
+        menuBtn.className = 'luatools-ctx-menu-item';
+        if (refItem) {
+            var cs2 = window.getComputedStyle(refItem);
+            menuBtn.style.cssText = 'cursor:pointer; padding:' + cs2.paddingTop + ' ' + cs2.paddingRight + ' ' + cs2.paddingBottom + ' ' + cs2.paddingLeft + '; font-size:' + cs2.fontSize + '; color:' + cs2.color + '; font-family:' + cs2.fontFamily + '; line-height:' + cs2.lineHeight + ';';
+        } else {
+            menuBtn.style.cssText = 'cursor:pointer; padding:6px 16px; font-size:13px; color:#b8bcbf;';
+        }
+        menuBtn.textContent = lt('LuaTools Menu');
+        menuBtn.onmouseover = function() { this.style.backgroundColor = 'rgba(255,255,255,0.1)'; this.style.color = '#fff'; };
+        menuBtn.onmouseout = function() { this.style.backgroundColor = 'transparent'; this.style.color = refItem ? window.getComputedStyle(refItem).color : '#b8bcbf'; };
+        
+        menuBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var p = container;
+            while (p && p !== document.body) {
+                if (p.style) p.style.display = 'none';
+                if (p.parentNode && p.parentNode !== document.body && p.parentNode.children && p.parentNode.children.length <= 3) {
+                    p = p.parentNode;
+                } else { break; }
+            }
+            if (!isNaN(appid)) {
+                window.__LuaToolsCurrentAppId = appid;
+                if (typeof showSettingsPopup === 'function') showSettingsPopup();
+            }
+        });
+
+        container.appendChild(sep);
+        container.appendChild(getBtn);
+        container.appendChild(menuBtn);
+        backendLog('LuaTools: Injected context menu items for appid=' + appid);
+    }
+
+    // --- Search Results Menu Injection ---
+    // Find and inject LT button into search result row menus (the 3-dot menu)
+    function findAndInjectIntoSearchMenus() {
+        // Strategy: In Steam search results, each game row has a 3-dot menu button (ellipsis)
+        // that opens a dropdown menu. We need to find these and inject our LT button.
+        
+        // Look for search result rows - try multiple selectors for different Steam UI versions
+        var searchRows = Array.from(document.querySelectorAll('[id^="search_result_"]')).concat(
+            Array.from(document.querySelectorAll('[class*="search_result"]')),
+            Array.from(document.querySelectorAll('[class*="search-result"]'))
+        );
+        
+        // Deduplicate
+        var uniqueRows = {};
+        var rows = [];
+        for (var r = 0; r < searchRows.length; r++) {
+            var row = searchRows[r];
+            if (!row || uniqueRows[row.id || row.className]) continue;
+            uniqueRows[row.id || row.className] = true;
+            rows.push(row);
+        }
+        
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            if (!row || row.querySelector('.luatools-search-menu-injected')) continue;
+            
+            // Find the 3-dot menu button in this row
+            var ellipsisBtn = null;
+            var btns = row.querySelectorAll('button, [role="button"], div');
+            
+            for (var b = 0; b < btns.length; b++) {
+                var btn = btns[b];
+                var text = (btn.textContent || '').trim();
+                var ariaLabel = btn.getAttribute('aria-label') || '';
+                var title = btn.getAttribute('title') || '';
+                var innerHTML = btn.innerHTML || '';
+                
+                // The 3-dot menu button typically:
+                // - Has no visible text or "..." or "…"
+                // - Has an aria-label like "Options", "More", "Menu" or similar
+                // - Contains an ellipsis icon, 3-dot SVG, or similar
+                var hasEllipsisText = (text === '' || text === '…' || text === '...');
+                var hasOptionLabel = (ariaLabel.toLowerCase().indexOf('option') !== -1 || 
+                                     ariaLabel.toLowerCase().indexOf('menu') !== -1 ||
+                                     ariaLabel.toLowerCase().indexOf('more') !== -1 ||
+                                     title.toLowerCase().indexOf('option') !== -1 ||
+                                     title.toLowerCase().indexOf('more') !== -1);
+                var hasEllipsisIcon = (innerHTML.indexOf('…') !== -1 || 
+                                      innerHTML.indexOf('...') !== -1 ||
+                                      innerHTML.indexOf('ellipsis') !== -1 ||
+                                      innerHTML.indexOf('more_vert') !== -1 || // Material Design icon
+                                      (btn.querySelector('svg') && btn.querySelector('svg').innerHTML.indexOf('path') !== -1 && text === ''));
+                
+                if ((hasEllipsisText && hasOptionLabel) || (hasOptionLabel && (hasEllipsisIcon || hasEllipsisText))) {
+                    ellipsisBtn = btn;
+                    break;
+                }
+            }
+            
+            if (!ellipsisBtn) continue;
+            
+            // Mark this row as processed to avoid re-injecting
+            var marker = document.createElement('div');
+            marker.className = 'luatools-search-menu-injected';
+            marker.style.display = 'none';
+            row.appendChild(marker);
+            
+            // Get the app ID from the row
+            var appLink = row.querySelector('a[href*="/app/"]');
+            var searchRowAppId = NaN;
+            if (appLink && appLink.href) {
+                searchRowAppId = _extractAppIdFromHref(appLink.href);
+            }
+            
+            if (isNaN(searchRowAppId)) continue;
+            
+            // Set up click handler to inject when menu opens
+            (function(btnRef, appId, rowRef) {
+                btnRef.addEventListener('click', function(e) {
+                    setTimeout(function() {
+                        // Find the dropdown menu that appeared after clicking
+                        // First, try to find it near the button
+                        var allElements = document.querySelectorAll('*');
+                        var targetMenu = null;
+                        var bestScore = -1;
+                        
+                        for (var m = 0; m < Math.min(allElements.length, 500); m++) {
+                            var el = allElements[m];
+                            
+                            // Skip if hidden
+                            if (!el.offsetParent && el !== document.body) continue;
+                            
+                            var style = window.getComputedStyle(el);
+                            if (style.display === 'none' || style.visibility === 'hidden') continue;
+                            
+                            var rect = el.getBoundingClientRect();
+                            
+                            // Check if it's positioned near the button (small popup)
+                            if (rect.width > 400 || rect.height > 300) continue; // Too large
+                            if (rect.width < 50 || rect.height < 30) continue; // Too small
+                            
+                            var btnRect = btnRef.getBoundingClientRect();
+                            var distance = Math.abs(rect.left - btnRect.right) + Math.abs(rect.top - btnRect.bottom);
+                            if (distance > 300) continue; // Too far
+                            
+                            // Check if it looks like a dropdown (positioned absolutely or fixed)
+                            var isPopup = style.position === 'absolute' || style.position === 'fixed';
+                            if (!isPopup) continue;
+                            
+                            // Check if it has menu-like items (clickable elements with text)
+                            var items = el.querySelectorAll('div, a, button, li, span');
+                            if (items.length < 2) continue;
+                            
+                            // Prefer elements with exactly 3 items (like the standard Steam menu)
+                            var childCount = 0;
+                            for (var ci = 0; ci < el.children.length; ci++) {
+                                if (el.children[ci].textContent && el.children[ci].textContent.trim()) childCount++;
+                            }
+                            
+                            // Skip if it already has our injection
+                            if (el.querySelector('.luatools-ctx-menu-item')) continue;
+                            
+                            // Score this element - prefer ones closer to the button and with 3 items
+                            var score = (300 - distance) + (childCount === 3 ? 20 : 0);
+                            if (score > bestScore) {
+                                bestScore = score;
+                                targetMenu = el;
+                            }
+                        }
+                        
+                        if (targetMenu && bestScore > 50) {
+                            injectItems(targetMenu, appId);
+                            backendLog('LuaTools: Injected into search result menu for appid=' + appId);
+                        }
+                    }, 20);
+                }, false);
+            })(ellipsisBtn, searchRowAppId, row);
+        }
+    }
+
+    // Set up MutationObserver for search results injection
+    try {
+        var searchObserver = new MutationObserver(function(mutations) {
+            setTimeout(findAndInjectIntoSearchMenus, 30);
+        });
+        searchObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
+
+    // --- Library Game Details Page Injection ---
+    // Inject a "LuaTools Fixes" button into the game details page in the Library tab
+    const libraryState = { lastAppId: NaN, injected: false };
+    
+    try {
+        var libObserver = new MutationObserver(function() {
+            setTimeout(injectIntoLibraryGameDetails, 200);
+        });
+        libObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
+    
+    // Fallback polling
+    setInterval(injectIntoLibraryGameDetails, 2000);
+    
+    function injectIntoLibraryGameDetails() {
+        // Find the "Play Bar" area in the Library game details page
+        // Steam's React classes frequently change, we will look for:
+        // A container with a Play/Install button and a Settings (gear) button
+        var playBars = document.querySelectorAll('div');
+        var targetBar = null;
+        var playBtn = null;
+        var settingsBtn = null;
+        
+        for (var i = 0; i < playBars.length; i++) {
+            var bar = playBars[i];
+            // Only look at visible elements with some width that look like a row
+            if (bar.offsetParent === null || bar.getBoundingClientRect().width < 200) continue;
+            
+            // Skip if it doesn't have a button
+            var btns = bar.querySelectorAll('button, div[role="button"], a[role="button"]');
+            if (btns.length < 2) continue;
+            
+            var hasGreenBtn = false;
+            var hasGearIcon = false;
+            var localPlayBtn = null;
+            var localSettingsBtn = null;
+            
+            for (var b = 0; b < btns.length; b++) {
+                var btn = btns[b];
+                var text = (btn.textContent || '').trim().toUpperCase();
+                var btnRect = btn.getBoundingClientRect();
+                
+                // Only consider sizable buttons
+                if (btnRect.width < 10) continue;
+                
+                // Identify Play/Install/Resume button (usually large, often has a green or blue gradient)
+                var style = window.getComputedStyle(btn);
+                var isPrimaryAction = text === 'PLAY' || text === 'INSTALL' || text === 'RESUME' || text === 'UPDATE' || text === 'PAUSE';
+                
+                if (isPrimaryAction && btnRect.width > 60) {
+                    hasGreenBtn = true;
+                    localPlayBtn = btn;
+                } else if (text === '' && btnRect.width < 50 && btnRect.height < 50) {
+                    // Identify Settings gear icon (usually square-ish, no text, contains SVG)
+                    var svg = btn.querySelector('svg');
+                    // Additional checks: tooltip text, class names
+                    var hasSettingsClass = btn.className.toLowerCase().indexOf('setting') !== -1 || btn.className.toLowerCase().indexOf('manage') !== -1;
+                    var hasSettingsTooltip = btn.getAttribute('data-tooltip-text') === 'Manage' || btn.getAttribute('title') === 'Manage';
+                    var hasGearSvg = svg && svg.innerHTML && svg.innerHTML.indexOf('path') !== -1;
+                    
+                    if (hasSettingsClass || hasSettingsTooltip || hasGearSvg) {
+                        hasGearIcon = true;
+                        localSettingsBtn = btn;
+                    }
+                }
+            }
+            
+            // If we found both a primary action button and a settings gear icon in the same row container
+            // and the container is not the entire body/a huge wrapper
+            if (hasGreenBtn && hasGearIcon && bar.getBoundingClientRect().height < 150) {
+                // Ensure this is the most specific container (not a parent wrapper)
+                var isMostSpecific = true;
+                for (var j = 0; j < playBars.length; j++) {
+                    if (i !== j && bar.contains(playBars[j]) && playBars[j].contains(localPlayBtn) && playBars[j].contains(localSettingsBtn)) {
+                        isMostSpecific = false;
+                        break;
+                    }
+                }
+                
+                if (isMostSpecific) {
+                    targetBar = bar;
+                    playBtn = localPlayBtn;
+                    settingsBtn = localSettingsBtn;
+                    break;
+                }
+            }
+        }
+        
+        if (!targetBar) {
+            libraryState.injected = false;
+            return;
+        }
+        
+        // Extract AppID from URL
+        var appid = NaN;
+        var m = window.location.href.match(/\/app\/(\d+)/);
+        if (m) {
+            appid = parseInt(m[1], 10);
+        } else if (window.__LuaToolsCurrentAppId) {
+            appid = parseInt(window.__LuaToolsCurrentAppId, 10);
+        } else {
+            // Try to extract from the Play button React fiber
+            try {
+                var keys = Object.keys(playBtn).filter(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$') || k.startsWith('__reactProps$'));
+                for (var ki = 0; ki < keys.length; ki++) {
+                    var fiber = playBtn[keys[ki]];
+                    var depth = 15;
+                    while (fiber && depth-- > 0) {
+                        var props = fiber.memoizedProps || fiber;
+                        if (props) {
+                            if (props.appid && !isNaN(parseInt(props.appid))) appid = parseInt(props.appid, 10);
+                            if (props.appId && !isNaN(parseInt(props.appId))) appid = parseInt(props.appId, 10);
+                            if (props.appOverview && props.appOverview.appid) appid = parseInt(props.appOverview.appid, 10);
+                        }
+                        if (!isNaN(appid)) break;
+                        fiber = fiber.return || fiber._owner;
+                    }
+                    if (!isNaN(appid)) break;
+                }
+            } catch(e) {}
+        }
+        
+        if (isNaN(appid)) return;
+        
+        // If app changes, reset injection state
+        if (libraryState.lastAppId !== appid) {
+            libraryState.lastAppId = appid;
+            libraryState.injected = false;
+        }
+        
+        // Find the container holding the secondary buttons (Settings, Info, Favorite)
+        var secondaryButtonsContainer = null;
+        if (settingsBtn && settingsBtn.parentNode) {
+            secondaryButtonsContainer = settingsBtn.parentNode;
+            // Go up one level if the parent only contains the settings button
+            if (secondaryButtonsContainer.children.length === 1 && secondaryButtonsContainer.parentNode) {
+                secondaryButtonsContainer = secondaryButtonsContainer.parentNode;
+            }
+        }
+        
+        if (!secondaryButtonsContainer) secondaryButtonsContainer = targetBar;
+        
+        // Don't inject multiple times
+        if (secondaryButtonsContainer.querySelector('.luatools-library-fixes-btn') || libraryState.injected) {
+            libraryState.injected = true;
+            return;
+        }
+        
+        var btn = document.createElement('div');
+        btn.className = 'luatools-library-fixes-btn';
+        btn.title = lt('LuaTools Fixes');
+        
+        // Clone styles from the settings button
+        if (settingsBtn) {
+            btn.className += ' ' + settingsBtn.className; // Inherit structural classes
+            btn.style.cssText = window.getComputedStyle(settingsBtn).cssText;
+        } else {
+            btn.style.cssText = 'cursor:pointer; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.1); border-radius:3px; padding:0 12px; height:34px; margin-left:8px; color:#dedede; font-size:14px; font-weight:500;';
+        }
+        
+        // Override some styles to fit our text + icon
+        btn.style.width = 'auto'; // Give it variable width for the text
+        if (settingsBtn) {
+            // Keep the same height and padding as settings
+            var cs = window.getComputedStyle(settingsBtn);
+            btn.style.height = cs.height;
+            btn.style.padding = '0 12px'; // wider padding than the square gear icon
+            btn.style.minWidth = '80px';
+        }
+        btn.style.margin = '0 4px';
+        btn.style.position = 'relative'; // In case it was absolute
+        btn.style.cursor = 'pointer';
+        btn.style.opacity = '1';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+        
+        btn.innerHTML = '<span style="display:flex; align-items:center; gap:6px;"><i class="fa-solid fa-wrench" style="font-size:14px;"></i> <span>' + lt('Fixes') + '</span></span>';
+        
+        // Hover effects
+        btn.addEventListener('mouseenter', function() { 
+            this.style.backgroundColor = 'rgba(255,255,255,0.2)'; 
+            this.style.color = '#fff'; 
+        });
+        btn.addEventListener('mouseleave', function() { 
+            this.style.backgroundColor = settingsBtn ? window.getComputedStyle(settingsBtn).backgroundColor : 'rgba(255,255,255,0.1)'; 
+            this.style.color = settingsBtn ? window.getComputedStyle(settingsBtn).color : '#dedede'; 
+        });
+        
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isNaN(appid)) {
+                window.__LuaToolsCurrentAppId = appid;
+                if (typeof showFixesLoadingPopupAndCheck === 'function') {
+                    showFixesLoadingPopupAndCheck(appid);
+                } else {
+                    backendLog('LuaTools: showFixesLoadingPopupAndCheck not available');
+                }
+            }
+        });
+        
+        // Insert it BEFORE the settings button so it flows right-to-left
+        if (settingsBtn && settingsBtn.parentNode === secondaryButtonsContainer) {
+            secondaryButtonsContainer.insertBefore(btn, settingsBtn);
+        } else {
+            secondaryButtonsContainer.appendChild(btn);
+        }
+        
+        libraryState.injected = true;
+        backendLog('LuaTools: Injected Library game details fixes button for appid=' + appid);
+    }
+    // --- Top Navigation Header Injection ---
+    // Inject a "LUATOOLS" button into the main Steam top navigation bar
+    const topNavState = { injected: false };
+
+    try {
+        var topNavObserver = new MutationObserver(function() {
+            setTimeout(injectIntoTopNav, 100);
+        });
+        topNavObserver.observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
+    
+    // Fallback polling
+    setInterval(injectIntoTopNav, 2000);
+
+    function injectIntoTopNav() {
+        if (topNavState.injected || document.getElementById('luatools-topnav-btn')) {
+            topNavState.injected = true;
+            return;
+        }
+
+        // Strategy: find all links/divs containing STORE, LIBRARY, COMMUNITY
+        var allElements = document.querySelectorAll('a, div');
+        var storeEl = null;
+        var libraryEl = null;
+        var communityEl = null;
+        var profileEl = null;
+        
+        // The top bar container we want
+        var targetContainer = null;
+
+        for (var i = 0; i < allElements.length; i++) {
+            var el = allElements[i];
+            
+            // Only look at elements with single text nodes to avoid grabbing massive wrappers
+            if (el.children.length === 0 && el.textContent) {
+                var text = el.textContent.trim().toUpperCase();
+                if (text === 'STORE') storeEl = el;
+                else if (text === 'LIBRARY') libraryEl = el;
+                else if (text === 'COMMUNITY') communityEl = el;
+            }
+        }
+
+        if (storeEl && libraryEl && communityEl) {
+            // Find the closest common ancestor wrapper that isn't the whole page
+            var p1 = storeEl.parentNode;
+            var p2 = libraryEl.parentNode;
+            var p3 = communityEl.parentNode;
+            
+            // Steam's top bar usually has them as siblings in a Navigation container
+            if (p1 === p2 && p2 === p3) {
+                targetContainer = p1;
+            } else if (p1 && p1.parentNode === p2.parentNode) {
+                // Sometimes they are wrapped in individual divs
+                targetContainer = p1.parentNode;
+            }
+        }
+        
+        // If we still can't find it, look for classes matching top nav
+        if (!targetContainer) {
+            var topNavs = document.querySelectorAll('[class*="TopBar"], [class*="topbar"], [class*="MainMenu"], [class*="mainmenu"]');
+            for (var j = 0; j < topNavs.length; j++) {
+                var nav = topNavs[j];
+                var text = nav.textContent.toUpperCase();
+                if (text.indexOf('STORE') !== -1 && text.indexOf('LIBRARY') !== -1 && text.indexOf('COMMUNITY') !== -1) {
+                    // Try to find the exact container holding the links
+                    var links = nav.querySelectorAll('a, [role="button"]');
+                    if (links.length >= 3) {
+                        targetContainer = links[0].parentNode;
+                        libraryEl = links[1]; // Reference for styling
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!targetContainer) return;
+        if (document.getElementById('luatools-topnav-btn')) {
+            topNavState.injected = true;
+            return;
+        }
+
+        // Identify the styling to copy
+        var refNode = targetContainer.lastElementChild;
+        if (communityEl) refNode = communityEl.parentNode === targetContainer ? communityEl : communityEl.parentNode;
+        else if (libraryEl) refNode = libraryEl.parentNode === targetContainer ? libraryEl : libraryEl.parentNode;
+
+        // In Steam, the profile name is usually the last item. We'll inject just after it.
+        var btn = document.createElement(refNode ? refNode.tagName : 'A');
+        btn.id = 'luatools-topnav-btn';
+        
+        if (refNode) {
+            btn.className = refNode.className;
+            // Also clone internal structure if it has any (e.g. spans)
+            if (refNode.children.length > 0) {
+                btn.innerHTML = refNode.innerHTML;
+                var innerTextNode = btn.querySelector('span') || btn.querySelector('div') || btn;
+                innerTextNode.textContent = 'LUATOOLS';
+            } else {
+                btn.textContent = 'LUATOOLS';
+            }
+        } else {
+            btn.textContent = 'LUATOOLS';
+        }
+        
+        // Ensure styling matches Steam's top header typography
+        btn.style.cursor = 'pointer';
+        btn.style.textDecoration = 'none';
+        btn.style.display = 'inline-flex';
+        btn.style.alignItems = 'center';
+        btn.style.textTransform = 'uppercase';
+        btn.style.fontWeight = '500';
+        btn.style.padding = '0 8px'; // standard spacing
+        
+        // Hover effects matching Steam's top nav (brighter text)
+        btn.addEventListener('mouseenter', function() { 
+            this.style.color = '#fff';
+            this.style.textShadow = '0 0 10px rgba(255,255,255,0.2)'; // subtle glow
+            
+            // If dragging active border class from other elements, add it
+            try {
+                if (refNode && refNode.className) {
+                    var activeClass = refNode.className.split(' ').find(c => c.toLowerCase().includes('active') || c.toLowerCase().includes('hover'));
+                    if (activeClass) this.classList.add(activeClass);
+                }
+            } catch(e) {}
+        });
+        
+        btn.addEventListener('mouseleave', function() { 
+            this.style.color = '';
+            this.style.textShadow = 'none';
+            // Remove active classes
+            try {
+                var classes = Array.from(this.classList);
+                classes.forEach(c => {
+                    if (c.toLowerCase().includes('active') || c.toLowerCase().includes('hover')) {
+                        this.classList.remove(c);
+                    }
+                });
+            } catch(e) {}
+        });
+
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof showSettingsPopup === 'function') {
+                showSettingsPopup();
+            } else {
+                backendLog('LuaTools: showSettingsPopup not available');
+            }
+        });
+
+        // Insert after the last item
+        targetContainer.appendChild(btn);
+        topNavState.injected = true;
+        backendLog('LuaTools: Injected LUATOOLS button into top navigation bar');
+    }
 
 })();

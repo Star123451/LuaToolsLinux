@@ -50,7 +50,7 @@ SETTINGS_GROUPS: List[SettingGroup] = [
                 key="donateKeys",
                 label="Donate Keys",
                 option_type="toggle",
-                description="Allow LuaTools to donate spare Steam keys. (placeholder option)",
+                description="Allow LuaTools to donate spare Steam keys.",
                 default=True,
                 metadata={"yesLabel": "Yes", "noLabel": "No"},
             ),
@@ -58,9 +58,17 @@ SETTINGS_GROUPS: List[SettingGroup] = [
     ),
     SettingGroup(
         key="slssteam",
-        label="SLSsteam",
+        label="SLSsteam Engine Core",
         description="Options for SLSsteam integration.",
         options=[
+            SettingOption(
+                key="playNotOwnedGames",
+                label="Play Not Owned Games",
+                option_type="toggle",
+                description="",
+                default=False,
+                metadata={"style": "switch"}, # <--- AQUI ESTÁ A OPÇÃO COM O SWITCH!
+            ),
             SettingOption(
                 key="safeMode",
                 label="Safe Mode",
@@ -68,6 +76,57 @@ SETTINGS_GROUPS: List[SettingGroup] = [
                 description="Enable SLSsteam safe mode (limits patching).",
                 default=False,
                 metadata={"yesLabel": "On", "noLabel": "Off"},
+            ),
+        ],
+    ),
+    SettingGroup(
+        key="launcher",
+        label="External Launcher (ACCELA)",
+        description="Configuration for the external game launcher.",
+        options=[
+            SettingOption(
+                key="launcherPath",
+                label="Launcher Executable Path",
+                option_type="text",
+                description="Default: /home/deck/.local/share/ACCELA/run.sh",
+                default="",
+                metadata={"browseButton": True},
+            ),
+        ],
+    ),
+    SettingGroup(
+        key="workshop",
+        label="Workshop Downloader Tool",
+        description="Configuration for DepotDownloader.",
+        options=[
+            SettingOption(
+                key="workshopPath",
+                label="DepotDownloader Path",
+                option_type="text",
+                description="Optional override. Default uses built-in DepotDownloader.",
+                default="",
+                metadata={"browseButton": True},
+            ),
+        ],
+    ),
+    SettingGroup(
+        key="api_auth",
+        label="API & Authentication",
+        description="Configure API keys and authentication cookies.",
+        options=[
+            SettingOption(
+                key="ryuuCookie",
+                label="Ryuu Cookie (Forced Ryu)",
+                option_type="textarea",
+                description="Paste your cookie here...",
+                default="",
+            ),
+            SettingOption(
+                key="morrenusKey",
+                label="Morrenus API Key",
+                option_type="text",
+                description="Paste your API key here...",
+                default="",
             ),
         ],
     ),
@@ -130,5 +189,3 @@ def merge_defaults_with_values(values: Optional[Dict[str, Any]]) -> Dict[str, An
         merged[group_key] = merged_group
 
     return merged
-
-

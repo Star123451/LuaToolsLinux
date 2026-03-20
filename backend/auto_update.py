@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
 import sys
+import tempfile
 import zipfile
 from typing import Any, Dict, Optional
 
@@ -33,17 +35,75 @@ _UPDATE_CHECK_THREAD: Optional[threading.Thread] = None
 _AUTO_UPDATE_ENABLED = False  # Set to False to disable background checks
 
 
+def _looks_like_plugin_root(path: str) -> bool:
+    if not path or not os.path.isdir(path):
+        return False
+    has_plugin_json = os.path.isfile(os.path.join(path, "plugin.json"))
+    has_backend = os.path.isdir(os.path.join(path, "backend"))
+    has_public = os.path.isdir(os.path.join(path, "public"))
+    return has_plugin_json or (has_backend and has_public)
+
+
+def _find_extracted_payload_root(extract_root: str) -> str:
+    # If the extraction root itself is the plugin payload, use it.
+    if _looks_like_plugin_root(extract_root):
+        return extract_root
+
+    # Otherwise, look one and two levels deep for nested payload folders.
+    try:
+        for child in os.listdir(extract_root):
+            child_path = os.path.join(extract_root, child)
+            if _looks_like_plugin_root(child_path):
+                return child_path
+            if os.path.isdir(child_path):
+                for grandchild in os.listdir(child_path):
+                    grandchild_path = os.path.join(child_path, grandchild)
+                    if _looks_like_plugin_root(grandchild_path):
+                        return grandchild_path
+    except Exception:
+        pass
+
+    return extract_root
+
+
+def _merge_tree(src_root: str, dst_root: str) -> None:
+    for entry in os.listdir(src_root):
+        src_path = os.path.join(src_root, entry)
+        dst_path = os.path.join(dst_root, entry)
+        if os.path.isdir(src_path):
+            shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+        else:
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+            shutil.copy2(src_path, dst_path)
+
+
+def _extract_and_merge_update_archive(archive_path: str, plugin_root: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="luatools-update-") as temp_dir:
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            archive.extractall(temp_dir)
+
+        payload_root = _find_extracted_payload_root(temp_dir)
+        if not _looks_like_plugin_root(payload_root):
+            raise RuntimeError(
+                "Update archive does not contain a valid LuaTools plugin payload"
+            )
+
+        _merge_tree(payload_root, plugin_root)
+
+
 def apply_pending_update_if_any() -> str:
-    """Extract a pending update zip if present. Returns a message or empty string."""
+    """Extract a pending update zip if present and clean up nested folders."""
     pending_zip = backend_path(UPDATE_PENDING_ZIP)
     pending_info = backend_path(UPDATE_PENDING_INFO)
     if not os.path.exists(pending_zip):
         return ""
 
     try:
+        plugin_root = get_plugin_dir()
         logger.log(f"AutoUpdate: Applying pending update from {pending_zip}")
-        with zipfile.ZipFile(pending_zip, "r") as archive:
-            archive.extractall(get_plugin_dir())
+
+        _extract_and_merge_update_archive(pending_zip, plugin_root)
+
         try:
             os.remove(pending_zip)
         except Exception:
@@ -56,9 +116,7 @@ def apply_pending_update_if_any() -> str:
             pass
 
         new_version = str(info.get("version", "")) if isinstance(info, dict) else ""
-        if new_version:
-            return f"LuaTools updated to {new_version}. Please restart Steam."
-        return "LuaTools update applied. Please restart Steam."
+        return f"LuaTools updated to {new_version}. Please restart Steam." if new_version else "LuaTools update applied. Please restart Steam."
     except Exception as exc:
         logger.warn(f"AutoUpdate: Failed to apply pending update: {exc}")
         return ""
@@ -122,6 +180,34 @@ def _fetch_github_latest(cfg: Dict[str, Any]) -> Dict[str, Any]:
                     break
     except Exception:
         pass
+
+    if not zip_url:
+        # Fallback: pick the best zip asset even if exact name changed in release.
+        try:
+            assets = data.get("assets", [])
+            if isinstance(assets, list):
+                zip_candidates = []
+                for asset in assets:
+                    a_name = str(asset.get("name", "")).strip()
+                    a_url = str(asset.get("browser_download_url", "")).strip()
+                    if a_name.lower().endswith(".zip") and a_url:
+                        zip_candidates.append((a_name, a_url))
+
+                preferred = None
+                for name, url in zip_candidates:
+                    lowered = name.lower()
+                    if "luatools" in lowered or "ltsteamplugin" in lowered:
+                        preferred = (name, url)
+                        break
+
+                chosen = preferred or (zip_candidates[0] if zip_candidates else None)
+                if chosen:
+                    zip_url = chosen[1]
+                    logger.log(
+                        f"AutoUpdate: Using fallback zip asset '{chosen[0]}' (configured asset '{asset_name}' not found)"
+                    )
+        except Exception:
+            pass
 
     if not zip_url:
         logger.warn("AutoUpdate: No download URL found")
@@ -195,8 +281,7 @@ def check_for_update_once() -> str:
 
     # Attempt to extract immediately
     try:
-        with zipfile.ZipFile(pending_zip, "r") as archive:
-            archive.extractall(get_plugin_dir())
+        _extract_and_merge_update_archive(pending_zip, get_plugin_dir())
         try:
             os.remove(pending_zip)
         except Exception:
