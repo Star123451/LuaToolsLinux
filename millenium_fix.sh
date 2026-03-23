@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==================================================
-#   Millennium Fix & Install Script (Mirroring Original)
+#   Millennium Fix & Install Script (v3 - Final Fix)
 # ==================================================
 
 readonly GITHUB_ACCOUNT="SteamClientHomebrew/Millennium"
@@ -12,7 +12,7 @@ readonly INSTALL_DIR="/tmp/millennium"
 log() { printf "%b\n" "$1"; }
 is_root() { [ "$(id -u)" -eq 0 ]; }
 
-# --- STEP 1: BRUTAL UNINSTALL (YOUR ISOLATED CODE) ---
+# --- STEP 1: BRUTAL UNINSTALL ---
 uninstall_old_version() {
     log "\n[!] Starting brutal cleanup..."
     pkill -9 steam 2>/dev/null
@@ -35,60 +35,75 @@ uninstall_old_version() {
     log "[ok] Previous traces removed."
 }
 
-# --- STEP 2: ORIGINAL POST_INSTALL LOGIC ---
-# Copied exactly from the official Millennium installer
+# --- STEP 2: SMART POST_INSTALL LOGIC ---
 apply_post_install() {
+    log "\n[+] Running post-install hook..."
+    
+    # 1. Fix Permissions
     sudo chmod +x /opt/python-i686-3.11.8/bin/python3.11 2>/dev/null || true
 
-    log "installing for '${USER}'"
+    # 2. Identify the correct bootstrap file
+    # The AUR package uses libmillennium_x86.so, the manual script uses libmillennium_bootstrap_86x.so
+    BOOTSTRAP_SRC=""
+    if [ -f "/usr/lib/millennium/libmillennium_x86.so" ]; then
+        BOOTSTRAP_SRC="/usr/lib/millennium/libmillennium_x86.so"
+    elif [ -f "/usr/lib/millennium/libmillennium_bootstrap_86x.so" ]; then
+        BOOTSTRAP_SRC="/usr/lib/millennium/libmillennium_bootstrap_86x.so"
+    fi
 
-    # We check multiple paths to be safer than the original
+    if [ -z "$BOOTSTRAP_SRC" ]; then
+        log "[!] ERROR: Millennium bootstrap library not found in /usr/lib/millennium/"
+        return 1
+    fi
+
+    log "Using bootstrap source: $BOOTSTRAP_SRC"
+
+    # 3. Apply fix to all Steam paths
     for steam_path in "${HOME}/.steam/steam" "${HOME}/.local/share/Steam" "${HOME}/.var/app/com.valvesoftware.Steam/.local/share/Steam"; do
         [ -d "$steam_path" ] || continue
         
+        # Remove Beta
         beta_file="${steam_path}/package/beta"
-        target_lib="${steam_path}/ubuntu12_32/libXtst.so.6"
-
-        # Force Steam Stable (Crucial for plugins)
         if [ -f "${beta_file}" ]; then
-            log "removing beta '$(cat "${beta_file}")' in favor for stable."
+            log "-> Removing Steam Beta in $steam_path"
             rm "${beta_file}"
         fi
 
-        # Create symlink for millenniums preload bootstrap
+        # Create the Hook (Symlink)
         if [ -d "${steam_path}/ubuntu12_32" ]; then
-            log "Creating bootstrap symlink in ${steam_path}"
-            ln -sf /usr/lib/millennium/libmillennium_bootstrap_86x.so "${target_lib}"
+            log "-> Creating injection hook in $steam_path"
+            # We link it to libXtst.so.6 which is how Millennium hooks into Steam
+            ln -sf "$BOOTSTRAP_SRC" "${steam_path}/ubuntu12_32/libXtst.so.6"
         fi
     done
 }
 
-# --- STEP 3: INSTALLATION LOGIC ---
+# --- STEP 3: MAIN ---
 main() {
     if is_root; then log "Do not run as root!"; exit 1; fi
 
     uninstall_old_version
 
-    # Check if we are on Arch/CachyOS to use paru/yay
+    # Try AUR Reinstall (Paru/Yay)
     installed_aur=false
     if [ -f /etc/arch-release ] || [ -f /etc/cachyos-release ]; then
         log "\n[+] Arch-based system detected."
         if command -v paru >/dev/null; then
-            log "[+] Force reinstalling via paru..."
+            log "[+] Reinstalling via paru..."
             paru -S millennium --noconfirm --rebuild && installed_aur=true
         elif command -v yay >/dev/null; then
-            log "[+] Force reinstalling via yay..."
+            log "[+] Reinstalling via yay..."
             yay -S millennium --noconfirm --redownload && installed_aur=true
         fi
     fi
 
-    # Fallback to manual if not on Arch or AUR failed
+    # Manual Fallback
     if [ "$installed_aur" = false ]; then
-        log "\n[!] Using manual GitHub installation method..."
-        local target="linux-x86_64"
-        local response=$(curl -fsSL -H 'Accept: application/vnd.github.v3+json' "${RELEASES_URI}?per_page=1")
-        local tag=$(echo "${response}" | jq -r '.[0].tag_name')
-        local download_uri="${DOWNLOAD_URI}/${tag}/millennium-${tag#v}-${target}.tar.gz"
+        log "\n[!] Manual installation required..."
+        # Logic to fetch and install from GitHub
+        target="linux-x86_64"
+        tag=$(curl -fsSL -H 'Accept: application/vnd.github.v3+json' "${RELEASES_URI}?per_page=1" | jq -r '.[0].tag_name')
+        download_uri="${DOWNLOAD_URI}/${tag}/millennium-${tag#v}-${target}.tar.gz"
 
         mkdir -p "${INSTALL_DIR}/files"
         curl -L "${download_uri}" | tar xz -C "${INSTALL_DIR}/files"
@@ -96,12 +111,13 @@ main() {
         rm -rf "${INSTALL_DIR}"
     fi
 
-    # MANDATORY: Run the original post_install logic after the package manager finishes
+    # ALWAYS run post-install after the binaries are in place
     apply_post_install
 
-    log "\ndone.\n"
-    log "You can now start Steam."
-    log "https://docs.steambrew.app/users/installing#post-installation."
+    log "\n=============================================="
+    log "✨ SUCCESS: Millennium is now hooked into Steam."
+    log "Please restart Steam to see the changes."
+    log "==============================================\n"
 }
 
 main "$@"
