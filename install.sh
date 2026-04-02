@@ -54,8 +54,9 @@ print_help() {
 Usage: install.sh [option]
 
 Options:
-  --millennium        Install Millennium + LuaTools plugin
-  --non-millennium    Install SLSsteam/ACCELA + LuaTools standalone
+	1, --millennium      Install Millennium + LuaTools plugin
+	2, --non-millennium  Install SLSsteam/ACCELA + LuaTools standalone
+	3, --cancel          Exit without installing
   -h, --help          Show this help
 
 If no option is provided, an interactive menu is shown.
@@ -70,18 +71,21 @@ interactive_menu() {
 	echo "3) Cancel"
 	echo ""
 	local choice=""
-	if [[ -t 0 ]]; then
-		read -r -p "Choose installation mode [1-3]: " choice
-	elif [[ -r /dev/tty ]]; then
-		read -r -p "Choose installation mode [1-3]: " choice < /dev/tty
+	if [[ -r /dev/tty ]]; then
+		printf "Choose installation mode [1-3]: " > /dev/tty
+		IFS= read -r choice < /dev/tty || true
+	elif [[ -t 0 ]]; then
+		printf "Choose installation mode [1-3]: "
+		IFS= read -r choice || true
 	else
 		fail "No interactive TTY available. Re-run with --millennium or --non-millennium."
 	fi
+	choice="${choice//[[:space:]]/}"
 	case "$choice" in
 		1) install_millennium_flow ;;
 		2) install_standalone_flow ;;
 		3) info "Cancelled." ; exit 0 ;;
-		*) fail "Invalid option: $choice" ;;
+		*) fail "Invalid option: ${choice:-<empty>}" ;;
 	esac
 }
 
@@ -90,11 +94,15 @@ main() {
 	require_cmd bash
 
 	case "${1:-}" in
-		--millennium)
+		1|--millennium)
 			install_millennium_flow
 			;;
-		--non-millennium)
+		2|--non-millennium)
 			install_standalone_flow
+			;;
+		3|--cancel)
+			info "Cancelled."
+			exit 0
 			;;
 		-h|--help)
 			print_help
