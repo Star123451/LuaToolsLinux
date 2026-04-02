@@ -69,7 +69,14 @@ interactive_menu() {
 	echo "2) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
 	echo "3) Cancel"
 	echo ""
-	read -r -p "Choose installation mode [1-3]: " choice
+	local choice=""
+	if [[ -t 0 ]]; then
+		read -r -p "Choose installation mode [1-3]: " choice
+	elif [[ -r /dev/tty ]]; then
+		read -r -p "Choose installation mode [1-3]: " choice < /dev/tty
+	else
+		fail "No interactive TTY available. Re-run with --millennium or --non-millennium."
+	fi
 	case "$choice" in
 		1) install_millennium_flow ;;
 		2) install_standalone_flow ;;
