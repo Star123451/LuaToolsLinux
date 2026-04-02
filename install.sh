@@ -67,7 +67,7 @@ interactive_menu() {
 	echo ""
 	echo -e "${BOLD}LuaTools Installer${NC}"
 	echo "1) Millennium + LuaTools plugin"
-	echo "2) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
+	echo "2) (EXPERIMENTAL!) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
 	echo "3) Cancel"
 	echo ""
 	local choice=""
