@@ -2,6 +2,35 @@
 
 > A [Millennium](https://steambrew.app) plugin that downloads game manifest files for Steam on Linux.
 
+## Unified Installer
+
+LuaTools now uses a single installer entrypoint that lets you choose:
+
+- `Millennium + LuaTools plugin`
+- `Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)`
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash
+```
+
+For non-interactive installs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash -s -- --millennium
+curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash -s -- --non-millennium
+```
+
+The non-Millennium mode installs a CLI wrapper at `~/.local/bin/luatools`.
+
+### Example CLI Commands
+
+```bash
+luatools init-apis
+luatools add-fakeappid 480
+luatools add-token 480
+luatools add-dlcs 480
+```
+
 **By [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)**
 
 This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](https://github.com/AceSLS/SLSsteam) and [ACCELA](https://github.com/ciscosweater/enter-the-wired) instead of the Windows-only SteamTools.

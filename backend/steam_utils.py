@@ -8,7 +8,7 @@ import subprocess
 import sys
 from typing import Dict, Optional
 
-import Millennium  # type: ignore
+from platform_bridge import Millennium
 
 from logger import logger
 

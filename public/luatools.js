@@ -2,6 +2,40 @@
 (function() {
     'use strict';
 
+    // Fallback RPC bridge so LuaTools UI still works without Millennium.
+    (function ensureMillenniumBridge() {
+        try {
+            if (typeof window.Millennium !== 'undefined' && typeof window.Millennium.callServerMethod === 'function') {
+                return;
+            }
+            window.Millennium = {
+                callServerMethod: function(_plugin, method, args) {
+                    const payload = {
+                        method: String(method || ''),
+                        args: (args && typeof args === 'object') ? args : {}
+                    };
+                    return fetch('http://127.0.0.1:38495/rpc', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).then(function(res) {
+                        if (!res || !res.ok) {
+                            throw new Error('LuaTools bridge unavailable');
+                        }
+                        return res.json();
+                    }).then(function(body) {
+                        if (!body || body.success !== true) {
+                            throw new Error((body && body.error) ? String(body.error) : 'RPC failed');
+                        }
+                        return body.result;
+                    });
+                }
+            };
+        } catch (_) {
+            // no-op
+        }
+    })();
+
     // Forward logs to Millennium backend so they appear in the dev console
     function backendLog(message) {
         try {

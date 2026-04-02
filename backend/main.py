@@ -13,8 +13,7 @@ import urllib.request
 
 from typing import Any
 
-import Millennium  # type: ignore
-import PluginUtils  # type: ignore
+from platform_bridge import Millennium
 
 from api_manifest import (
     fetch_free_apis_now as api_fetch_free_apis_now,

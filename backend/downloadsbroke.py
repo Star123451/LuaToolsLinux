@@ -11,7 +11,7 @@ import time
 import subprocess
 from typing import Dict, Any
 
-import Millennium  # type: ignore
+from platform_bridge import Millennium
 
 from api_manifest import load_api_manifest
 from config import (

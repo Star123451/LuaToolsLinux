@@ -1,8 +1,109 @@
 #!/usr/bin/env bash
-echo "Please try running the Enter the Wired script and the Millennium script pinned in the Linux Support channel at the LuaTools Discord Server.
-Or just use these commands right here instead of going there:
-Millennium: curl -fsSL "https://steambrew.app/install.sh" | bash
-SLSsteam + ACCELA: curl -fsSL https://raw.githubusercontent.com/ciscosweater/enter-the-wired/main/enter-the-wired | bash
-LuaTools Plugin: curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/update.sh | bash
-REMEMBER TO CONFiGURE ACCELA! CHECK THE PINNED MESSAGE IN THE LINUX SUPPORT CHANNEL FOR THE CORRECT CONFIG!
-Also, set your ACCELA PATH in LuaTools Settings."
+set -euo pipefail
+
+SELF_REPO_BASE="https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main"
+MILLENNIUM_INSTALL_URL="https://steambrew.app/install.sh"
+LUATOOLS_MILLENNIUM_URL="$SELF_REPO_BASE/update.sh"
+LUATOOLS_STANDALONE_URL="$SELF_REPO_BASE/install_with_slssteam.sh"
+SLS_ACCELA_URL="https://raw.githubusercontent.com/ciscosweater/enter-the-wired/main/enter-the-wired"
+
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info() { echo -e "${CYAN}[INFO]${NC} $*"; }
+ok() { echo -e "${GREEN}[ OK ]${NC} $*"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+fail() { echo -e "${RED}[FAIL]${NC} $*"; exit 1; }
+
+require_cmd() {
+	command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
+}
+
+run_remote_script() {
+	local url="$1"
+	info "Running: $url"
+	curl -fsSL "$url" | bash
+}
+
+install_millennium_flow() {
+	info "Installing Millennium framework..."
+	run_remote_script "$MILLENNIUM_INSTALL_URL"
+
+	info "Installing LuaTools Millennium plugin..."
+	run_remote_script "$LUATOOLS_MILLENNIUM_URL"
+
+	ok "Millennium + LuaTools plugin install finished."
+}
+
+install_standalone_flow() {
+	info "Installing SLSsteam + ACCELA prerequisites..."
+	run_remote_script "$SLS_ACCELA_URL"
+
+	info "Installing LuaTools standalone (non-Millennium)..."
+	run_remote_script "$LUATOOLS_STANDALONE_URL"
+
+	ok "SLSsteam/ACCELA + LuaTools standalone install finished."
+}
+
+print_help() {
+	cat <<'EOF'
+Usage: install.sh [option]
+
+Options:
+  --millennium        Install Millennium + LuaTools plugin
+  --non-millennium    Install SLSsteam/ACCELA + LuaTools standalone
+  -h, --help          Show this help
+
+If no option is provided, an interactive menu is shown.
+EOF
+}
+
+interactive_menu() {
+	echo ""
+	echo -e "${BOLD}LuaTools Installer${NC}"
+	echo "1) Millennium + LuaTools plugin"
+	echo "2) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
+	echo "3) Cancel"
+	echo ""
+	read -r -p "Choose installation mode [1-3]: " choice
+	case "$choice" in
+		1) install_millennium_flow ;;
+		2) install_standalone_flow ;;
+		3) info "Cancelled." ; exit 0 ;;
+		*) fail "Invalid option: $choice" ;;
+	esac
+}
+
+main() {
+	require_cmd curl
+	require_cmd bash
+
+	case "${1:-}" in
+		--millennium)
+			install_millennium_flow
+			;;
+		--non-millennium)
+			install_standalone_flow
+			;;
+		-h|--help)
+			print_help
+			;;
+		"")
+			interactive_menu
+			;;
+		*)
+			warn "Unknown argument: $1"
+			print_help
+			exit 1
+			;;
+	esac
+
+	echo ""
+	info "If you use ACCELA downloads, set your ACCELA path in LuaTools settings/flow."
+}
+
+main "${1:-}"
