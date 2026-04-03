@@ -66,7 +66,7 @@ main() {
     fi
 
     local extracted
-    extracted="$(find "$src" -maxdepth 1 -type d -name '${REPO_NAME}-*' | head -n 1)"
+    extracted="$(find "$src" -maxdepth 1 -type d -name "${REPO_NAME}-*" | head -n 1)"
     [[ -n "$extracted" ]] || fail "Extracted content not found"
 
     mkdir -p "$INSTALL_ROOT"
