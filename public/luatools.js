@@ -4123,6 +4123,7 @@
             window.__LuaToolsButtonInserted = false;
             window.__LuaToolsRestartInserted = false;
             window.__LuaToolsIconInserted = false;
+            window.__LuaToolsFloatingButtonInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
             // Update translations and re-add buttons
@@ -4332,6 +4333,42 @@
         });
     }
 
+    function addFloatingLauncherButton() {
+        if (document.querySelector('.luatools-floating-launcher') || window.__LuaToolsFloatingButtonInserted) {
+            return;
+        }
+
+        try {
+            ensureLuaToolsStyles();
+            ensureFontAwesome();
+
+            const launcher = document.createElement('a');
+            launcher.href = '#';
+            launcher.className = 'luatools-floating-launcher luatools-btn';
+            launcher.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:100010;display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--lt-gradient);color:var(--lt-text);border:1px solid var(--lt-border-hover);border-radius:999px;box-shadow:0 10px 30px var(--lt-shadow);text-decoration:none;font-weight:700;letter-spacing:0.2px;';
+            launcher.innerHTML = '<i class="fa-solid fa-bolt"></i><span>LuaTools</span>';
+            launcher.title = 'LuaTools';
+
+            launcher.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px) scale(1.02)';
+                this.style.boxShadow = '0 14px 36px var(--lt-shadow-hover)';
+            });
+            launcher.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+                this.style.boxShadow = '0 10px 30px var(--lt-shadow)';
+            });
+            launcher.addEventListener('click', function(e) {
+                e.preventDefault();
+                showSettingsPopup();
+            });
+
+            document.body.appendChild(launcher);
+            window.__LuaToolsFloatingButtonInserted = true;
+        } catch (err) {
+            backendLog('LuaTools: floating launcher failed: ' + err);
+        }
+    }
+
     // 2. Função Principal do Botão (Wrapper Vertical Centralizado - SEM AVISOS)
     function addLuaToolsButton() {
         const currentUrl = window.location.href;
@@ -4340,6 +4377,7 @@
             window.__LuaToolsButtonInserted = false;
             window.__LuaToolsRestartInserted = false;
             window.__LuaToolsIconInserted = false;
+            window.__LuaToolsFloatingButtonInserted = false;
             window.__LuaToolsPresenceCheckInFlight = false;
             window.__LuaToolsPresenceCheckAppId = undefined;
             ensureTranslationsLoaded(false).then(function() {
@@ -4512,6 +4550,7 @@
             }
         } else {
             if (!logState.missingOnce) { backendLog('LuaTools: steamdbContainer not found'); logState.missingOnce = true; }
+            addFloatingLauncherButton();
         }
     }
 
