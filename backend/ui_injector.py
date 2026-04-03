@@ -39,27 +39,51 @@ def _sync_assets(public_dir: str, target_dir: str) -> None:
         shutil.copytree(themes_src, themes_dst)
 
 
-def _inject_index(index_html: str) -> bool:
+def _inject_index(index_html: str, script_tag: str) -> bool:
     with open(index_html, "r", encoding="utf-8", errors="ignore") as f:
         html = f.read()
 
+    snippet = f"\n{MARKER_START}\n{script_tag}\n{MARKER_END}\n"
+
     if MARKER_START in html and MARKER_END in html:
-        return False
+        start_idx = html.find(MARKER_START)
+        end_idx = html.find(MARKER_END)
+        if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
+            return False
+        end_idx += len(MARKER_END)
+        existing_block = html[start_idx:end_idx]
+        if existing_block == snippet.strip():
+            return False
+        patched = html[:start_idx] + snippet.strip() + html[end_idx:]
+        with open(index_html, "w", encoding="utf-8") as f:
+            f.write(patched)
+        return True
 
     idx = html.lower().rfind("</body>")
     if idx == -1:
         return False
 
-    snippet = f"\n{MARKER_START}\n{SCRIPT_TAG}\n{MARKER_END}\n"
     patched = html[:idx] + snippet + html[idx:]
     with open(index_html, "w", encoding="utf-8") as f:
         f.write(patched)
     return True
 
 
+def _build_inline_script_tag(script_path: str) -> str | None:
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            script_content = f.read()
+    except Exception:
+        return None
+
+    script_content = script_content.replace("</script>", "<\\/script>")
+    return f"<script>\n{script_content}\n</script>"
+
+
 def ensure_ui_injection(install_root: str) -> dict[str, int]:
     public_dir = os.path.join(install_root, "public")
     result = {"roots_seen": 0, "roots_patched": 0, "assets_synced": 0}
+    script_tag = _build_inline_script_tag(os.path.join(public_dir, "luatools.js")) or SCRIPT_TAG
 
     for root in _candidate_steam_roots():
         steamui = os.path.join(root, "steamui")
@@ -71,7 +95,7 @@ def ensure_ui_injection(install_root: str) -> dict[str, int]:
         target_dir = os.path.join(steamui, "LuaTools")
         _sync_assets(public_dir, target_dir)
         result["assets_synced"] += 1
-        if _inject_index(index_html):
+        if _inject_index(index_html, script_tag):
             result["roots_patched"] += 1
 
     return result
