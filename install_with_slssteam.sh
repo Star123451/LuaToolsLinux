@@ -122,6 +122,8 @@ PYTHON_BIN="$VENV_DIR/bin/python"
 if [[ ! -x "\$PYTHON_BIN" ]]; then
     PYTHON_BIN=python3
 fi
+BRIDGE_HOST="127.0.0.1"
+BRIDGE_PORT="38495"
 LOG_FILE="\${XDG_STATE_HOME:-\$HOME/.local/state}/luatools/bridge.log"
 PID_FILE="\${XDG_RUNTIME_DIR:-/tmp}/luatools-bridge.pid"
 mkdir -p "\$(dirname "\$LOG_FILE")"
@@ -133,8 +135,29 @@ if [[ -f "\$PID_FILE" ]]; then
     rm -f "\$PID_FILE"
 fi
 
-nohup "\$PYTHON_BIN" "$INSTALL_ROOT/backend/web_bridge_server.py" --host 127.0.0.1 --port 38495 >>"\$LOG_FILE" 2>&1 &
+nohup "\$PYTHON_BIN" "$INSTALL_ROOT/backend/web_bridge_server.py" --host "\$BRIDGE_HOST" --port "\$BRIDGE_PORT" >>"\$LOG_FILE" 2>&1 &
 echo "\$!" > "\$PID_FILE"
+
+health_url="http://\$BRIDGE_HOST:\$BRIDGE_PORT/health"
+for _ in 1 2 3 4 5; do
+    if "\$PYTHON_BIN" - "\$health_url" <<'PY' >/dev/null 2>&1; then
+import sys
+import urllib.request
+
+url = sys.argv[1]
+with urllib.request.urlopen(url, timeout=1) as response:
+    if response.status != 200:
+        raise SystemExit(1)
+PY
+        echo "LuaTools bridge ready at \$health_url"
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "LuaTools bridge started but is not reachable at \$health_url" >&2
+echo "Check \$LOG_FILE for details." >&2
+exit 1
 EOF
     chmod +x "$BRIDGE_STARTER"
 
@@ -150,7 +173,15 @@ exec "\$PYTHON_BIN" "$INSTALL_ROOT/backend/ui_injector.py"
 EOF
     chmod +x "$UI_HEALER"
 
-    "$UI_HEALER" >/dev/null 2>&1 || warn "UI self-heal step failed"
+    local ui_output=""
+    if ! ui_output="$($UI_HEALER 2>&1)"; then
+        warn "UI self-heal step failed"
+        if [ -n "$ui_output" ]; then
+            warn "$ui_output"
+        fi
+    elif [ -n "$ui_output" ]; then
+        info "$ui_output"
+    fi
 
     info "LuaTools standalone installed"
     info "CLI wrapper: $WRAPPER_PATH"

@@ -83,6 +83,9 @@ def main() -> int:
     print(
         f"roots_seen={stats['roots_seen']} roots_patched={stats['roots_patched']} assets_synced={stats['assets_synced']}"
     )
+    if stats["roots_seen"] == 0:
+        print("Steam UI not found. Open Steam and rerun luatools-heal-ui after Steam has started.")
+        return 1
     return 0
 
 
