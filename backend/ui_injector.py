@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 
 
 MARKER_START = "<!-- LuaToolsLinux Inject START -->"
@@ -80,6 +81,49 @@ def _build_inline_script_tag(script_path: str) -> str | None:
     return f"<script>\n{script_content}\n</script>"
 
 
+def _audit_library_is_compatible(path: str) -> bool:
+    try:
+        if not os.path.isfile(path):
+            return False
+        result = subprocess.run(["file", path], capture_output=True, text=True, check=False)
+        output = (result.stdout or "") + (result.stderr or "")
+        if "ELF 32-bit" in output:
+            return False
+        return True
+    except Exception:
+        return True
+
+
+def _remove_ld_audit_line(steam_sh: str) -> bool:
+    try:
+        with open(steam_sh, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+        filtered = [
+            line for line in lines
+            if "LD_AUDIT" not in line or "SLSsteam" not in line
+        ]
+        if filtered == lines:
+            return False
+        with open(steam_sh, "w", encoding="utf-8") as handle:
+            handle.writelines(filtered)
+        return True
+    except Exception:
+        return False
+
+
+def repair_steam_launcher_if_needed() -> str:
+    for root in _candidate_steam_roots():
+        steam_sh = os.path.join(root, "steam.sh")
+        if not os.path.isfile(steam_sh):
+            continue
+        if _audit_library_is_compatible(os.path.expanduser("~/.local/share/SLSsteam/library-inject.so")):
+            if _audit_library_is_compatible(os.path.expanduser("~/.local/share/SLSsteam/SLSsteam.so")):
+                return "Steam launcher compatible with SLSsteam."
+        if _remove_ld_audit_line(steam_sh):
+            return f"Removed incompatible LD_AUDIT entry from {steam_sh}. Restart Steam."
+    return "No Steam launcher repair was needed."
+
+
 def ensure_ui_injection(install_root: str) -> dict[str, int]:
     public_dir = os.path.join(install_root, "public")
     result = {"roots_seen": 0, "roots_patched": 0, "assets_synced": 0}
@@ -103,7 +147,9 @@ def ensure_ui_injection(install_root: str) -> dict[str, int]:
 
 def main() -> int:
     install_root = os.path.expanduser(os.environ.get("LUATOOLS_INSTALL_ROOT", "~/.local/share/LuaToolsLinux"))
+    repair_message = repair_steam_launcher_if_needed()
     stats = ensure_ui_injection(install_root)
+    print(repair_message)
     print(
         f"roots_seen={stats['roots_seen']} roots_patched={stats['roots_patched']} assets_synced={stats['assets_synced']}"
     )

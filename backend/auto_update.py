@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -314,15 +315,27 @@ def restart_steam_internal() -> bool:
             # --- LINUX LOGIC (Fire-and-Forget) ---
             logger.log("LuaTools: Linux detected. Preparing Fire-and-Forget restart...")
 
-            # Tenta achar o wrapper do SLSsteam
-            sls_wrapper = os.path.expanduser("~/.local/share/SLSsteam/path/steam")
+            launcher_candidates = [
+                "flatpak run com.valvesoftware.Steam" if shutil.which("flatpak") else None,
+                os.path.expanduser("~/.local/share/SLSsteam/path/steam"),
+                os.path.expanduser("~/.steam/steam/steam.sh"),
+                os.path.expanduser("~/.local/share/Steam/steam.sh"),
+                "steam",
+            ]
+            launcher_candidates = [candidate for candidate in launcher_candidates if candidate]
             steam_cmd = "steam"
 
-            if os.path.exists(sls_wrapper):
-                steam_cmd = sls_wrapper
-                logger.log(f"LuaTools: Found SLSsteam wrapper at {steam_cmd}")
+            for candidate in launcher_candidates:
+                if candidate.startswith("flatpak run "):
+                    steam_cmd = candidate
+                    logger.log(f"LuaTools: Found Steam launcher at {steam_cmd}")
+                    break
+                if os.path.exists(candidate):
+                    steam_cmd = candidate
+                    logger.log(f"LuaTools: Found Steam launcher at {steam_cmd}")
+                    break
             else:
-                logger.log("LuaTools: Wrapper not found, trying default 'steam' command")
+                logger.log("LuaTools: No explicit launcher found, falling back to 'steam' command")
 
             # Comando Fire-and-Forget:
             # 1. sleep 1: Dá tempo para a função retornar True para o UI
