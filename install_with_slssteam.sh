@@ -10,10 +10,17 @@ BIN_DIR="$HOME/.local/bin"
 WRAPPER_PATH="$BIN_DIR/luatools"
 BRIDGE_STARTER="$BIN_DIR/luatools-bridge"
 UI_HEALER="$BIN_DIR/luatools-heal-ui"
+TMP_DIR=""
 
 info() { echo "[LuaTools] $*"; }
 warn() { echo "[LuaTools][WARN] $*"; }
 fail() { echo "[LuaTools][FAIL] $*"; exit 1; }
+
+cleanup() {
+    if [ -n "${TMP_DIR:-}" ] && [ -d "$TMP_DIR" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
 
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
@@ -49,12 +56,11 @@ main() {
     require_cmd curl
     require_cmd python3
 
-    local tmp
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
+    TMP_DIR="$(mktemp -d)"
+    trap cleanup EXIT
 
-    local archive="$tmp/luatools.zip"
-    local src="$tmp/src"
+    local archive="$TMP_DIR/luatools.zip"
+    local src="$TMP_DIR/src"
     local zip_url="https://codeload.github.com/${REPO_OWNER}/${REPO_NAME}/zip/refs/heads/${BRANCH}"
 
     info "Downloading LuaTools bundle from ${REPO_OWNER}/${REPO_NAME}@${BRANCH}"
