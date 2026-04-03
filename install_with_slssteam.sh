@@ -6,6 +6,7 @@ REPO_NAME="LuaToolsLinux"
 BRANCH="main"
 
 INSTALL_ROOT="$HOME/.local/share/LuaToolsLinux"
+VENV_DIR="$INSTALL_ROOT/.venv"
 BIN_DIR="$HOME/.local/bin"
 WRAPPER_PATH="$BIN_DIR/luatools"
 BRIDGE_STARTER="$BIN_DIR/luatools-bridge"
@@ -84,21 +85,43 @@ main() {
     cp "$extracted/README.md" "$INSTALL_ROOT/README.md"
 
     info "Installing Python dependencies"
-    if ! python3 -m pip install --user -r "$INSTALL_ROOT/requirements.txt" >/dev/null 2>&1; then
-        warn "pip dependency install failed. You can retry manually with:"
-        warn "python3 -m pip install --user -r $INSTALL_ROOT/requirements.txt"
+    local python_bin="python3"
+    if python3 -m venv "$VENV_DIR" >/dev/null 2>&1; then
+        python_bin="$VENV_DIR/bin/python"
+    else
+        warn "Could not create a local virtualenv; falling back to user-site pip install."
+    fi
+
+    if ! "$python_bin" -m pip install -r "$INSTALL_ROOT/requirements.txt" >/dev/null 2>&1; then
+        if [[ "$python_bin" != "python3" ]]; then
+            warn "Virtualenv pip install failed; retrying with user-site pip."
+            if ! python3 -m pip install --user -r "$INSTALL_ROOT/requirements.txt" >/dev/null 2>&1; then
+                fail "Python dependency install failed"
+            fi
+            python_bin="python3"
+        else
+            fail "Python dependency install failed"
+        fi
     fi
 
     mkdir -p "$BIN_DIR"
     cat > "$WRAPPER_PATH" <<EOF
 #!/usr/bin/env bash
-exec python3 "$INSTALL_ROOT/backend/standalone_cli.py" "\$@"
+PYTHON_BIN="$VENV_DIR/bin/python"
+if [[ ! -x "\$PYTHON_BIN" ]]; then
+    PYTHON_BIN=python3
+fi
+exec "\$PYTHON_BIN" "$INSTALL_ROOT/backend/standalone_cli.py" "\$@"
 EOF
     chmod +x "$WRAPPER_PATH"
 
     cat > "$BRIDGE_STARTER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+PYTHON_BIN="$VENV_DIR/bin/python"
+if [[ ! -x "\$PYTHON_BIN" ]]; then
+    PYTHON_BIN=python3
+fi
 LOG_FILE="\${XDG_STATE_HOME:-\$HOME/.local/state}/luatools/bridge.log"
 PID_FILE="\${XDG_RUNTIME_DIR:-/tmp}/luatools-bridge.pid"
 mkdir -p "\$(dirname "\$LOG_FILE")"
@@ -110,7 +133,7 @@ if [[ -f "\$PID_FILE" ]]; then
     rm -f "\$PID_FILE"
 fi
 
-nohup python3 "$INSTALL_ROOT/backend/web_bridge_server.py" --host 127.0.0.1 --port 38495 >>"\$LOG_FILE" 2>&1 &
+nohup "\$PYTHON_BIN" "$INSTALL_ROOT/backend/web_bridge_server.py" --host 127.0.0.1 --port 38495 >>"\$LOG_FILE" 2>&1 &
 echo "\$!" > "\$PID_FILE"
 EOF
     chmod +x "$BRIDGE_STARTER"
@@ -118,8 +141,12 @@ EOF
     cat > "$UI_HEALER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+PYTHON_BIN="$VENV_DIR/bin/python"
+if [[ ! -x "\$PYTHON_BIN" ]]; then
+    PYTHON_BIN=python3
+fi
 export LUATOOLS_INSTALL_ROOT="$INSTALL_ROOT"
-exec python3 "$INSTALL_ROOT/backend/ui_injector.py"
+exec "\$PYTHON_BIN" "$INSTALL_ROOT/backend/ui_injector.py"
 EOF
     chmod +x "$UI_HEALER"
 
