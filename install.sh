@@ -28,11 +28,39 @@ run_remote_script() {
 	curl -fsSL "$url" | bash
 }
 
+uninstall_all_flow() {
+    info "Uninstalling everything..."
+    
+    # 1. Cleanup Millennium (Option 1)
+    info "Removing Millennium Framework files..."
+    sudo rm -rf /usr/lib/millennium \
+                /usr/share/millennium \
+                "${XDG_CONFIG_HOME:-$HOME/.config}/millennium" \
+                "${XDG_DATA_HOME:-$HOME/.local/share}/millennium"
+
+    # Restore Steam Binary
+    if [ -f "/usr/bin/steam.millennium.bak" ]; then
+        info "Restoring original Steam executable..."
+        sudo mv /usr/bin/steam.millennium.bak /usr/bin/steam
+    fi
+
+    # Remove symlink hooks
+    info "Removing preloader hooks..."
+    rm -f "${HOME}/.steam/steam/ubuntu12_32/libXtst.so.6"
+    
+    # 2. Cleanup Standalone/Experimental (Option 2)
+    # Removing typical LuaTools/SLS paths
+    info "Removing LuaTools Standalone/Experimental components..."
+    rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/luatools" \
+           "${XDG_CONFIG_HOME:-$HOME/.config}/luatools" \
+           "${HOME}/.luatools" 2>/dev/null || true
+
+    ok "Uninstall finished. Your system is clean."
+}
+
 install_millennium_flow() {
 	info "Installing Millennium framework (Versão Fixa 2.35.0 + Limpeza)..."
 
-	# Embutimos o script modificado do Millennium aqui dentro usando cat << 'EOF'
-	# Assim você não depende de links externos.
 	cat << 'EOF' > /tmp/millennium_v235_installer.sh
 #!/usr/bin/env bash
 
@@ -66,16 +94,13 @@ check_dependencies() {
     done
 }
 
-# Força a versão 2.35.0
 fetch_release_info() {
     echo "2.35.0:35546112"
     return 0
 }
 
-# Limpeza das versões anteriores
 remove_old_installation() {
     log ":: Cleaning up previous Millennium installations..."
-    
     sudo rm -rf /usr/lib/millennium \
                 /usr/share/millennium \
                 "${XDG_CONFIG_HOME:-$HOME/.config}/millennium" \
@@ -90,10 +115,7 @@ remove_old_installation() {
 download_package() {
     local url="$1"
     local dest="$2"
-    if ! curl --fail --location --output "${dest}" "${url}"; then
-        log "Download failed for ${url}"
-        return 1
-    fi
+    curl --fail --location --output "${dest}" "${url}"
 }
 
 extract_package() {
@@ -105,26 +127,18 @@ extract_package() {
 
 install_millennium() {
     local extract_path="$1"
-    if [ "${DRY_RUN}" -eq 0 ]; then
-        sudo cp -r "${extract_path}"/* / || true
-    else
-        log "[DRY RUN] Would copy files from ${extract_path} to /"
-    fi
+    sudo cp -r "${extract_path}"/* / || true
 }
 
 post_install() {
     [ -f /opt/python-i686-3.11.8/bin/python3.11 ] && sudo chmod +x /opt/python-i686-3.11.8/bin/python3.11
-
     log "installing for '${USER}'"
-
     beta_file="${HOME}/.steam/steam/package/beta"
     target="${HOME}/.steam/steam/ubuntu12_32/libXtst.so.6"
-
     if [ -f "${beta_file}" ]; then
         log "removing beta '$(cat "${beta_file}")' in favor for stable."
         rm "${beta_file}"
     fi
-
     [ -d "${HOME}/.steam/steam/ubuntu12_32" ] && ln -sf /usr/lib/millennium/libmillennium_bootstrap_86x.so "${target}"
 }
 
@@ -136,81 +150,33 @@ cleanup() {
 
 main() {
     local target release_info tag size download_uri install_dir extract_path tar_file
-
-    for arg in "$@"; do
-        case ${arg} in
-            --dry-run) DRY_RUN=1; shift ;;
-            --beta) ALLOW_BETA=1; shift ;;
-        esac
-    done
-
-    if is_root; then
-        log "Do not run this script as root!"
-        exit 1
-    fi
-
+    if is_root; then log "Do not run as root!"; exit 1; fi
     target=$(verify_platform)
     check_dependencies
-
     release_info=$(fetch_release_info)
     tag="${release_info%%:*}"
-    size=$(format_size "${release_info##*:}")
-
-    install_size_uri="${DOWNLOAD_URI}/v${tag}/millennium-v${tag}-${target}.installsize"
     download_uri="${DOWNLOAD_URI}/v${tag}/millennium-v${tag}-${target}.tar.gz"
-    sha256_uri="${DOWNLOAD_URI}/v${tag}/millennium-v${tag}-${target}.sha256"
-
-    sha256digest=$(curl -sL "${sha256_uri}")
-    installed_size=$(format_size "$(curl -sL "${install_size_uri}")")
-
-    log "\nPackages (1) millennium@${tag}-x86_64\n"
-    
-    # Executa a limpeza
     remove_old_installation
-
-    log "receiving packages..."
-
-    install_dir="${DRY_RUN:+./dry-run}"
-    install_dir="${install_dir:-${INSTALL_DIR}}"
+    install_dir="${INSTALL_DIR}"
     extract_path="${install_dir}/files"
     tar_file="${install_dir}/millennium-v${tag}-${target}.tar.gz"
-
     rm -rf "${install_dir}"
     mkdir -p "${install_dir}"
-
-    log "(1/4) Downloading millennium-v${tag}-${target}.tar.gz..."
+    log "Downloading package..."
     download_package "${download_uri}" "${tar_file}"
-    
-    log "(2/4) Verifying checksums..."
-    if (cd "${install_dir}" && echo "${sha256digest}" | sha256sum -c --status); then
-        echo -ne "\033[1A"
-        log "(2/4) Verifying checksums... OK"
-    else
-        log "(2/4) Verifying checksums... FAILED"
-    fi
-    
-    log "(3/4) Unpacking millennium-v${tag}-${target}.tar.gz..."
+    log "Unpacking..."
     extract_package "${tar_file}" "${extract_path}"
-    
-    log "(4/4) Installing millennium..."
+    log "Installing..."
     install_millennium "${extract_path}"
-
-    log ":: Running post-install scripts..."
-    log "(1/1) Setting up shared object preloader hook..."
+    log "Post-install..."
     post_install
-
     cleanup "${install_dir}"
-
     log "Millennium 2.35.0 base install done.\n"
 }
-
 main "$@"
 EOF
 
-	# Executa o script que acabamos de gerar no /tmp
 	bash /tmp/millennium_v235_installer.sh
-	
-	# Deleta o arquivo pra manter a máquina limpa
 	rm /tmp/millennium_v235_installer.sh
 
 	info "Installing LuaTools Millennium plugin..."
@@ -236,10 +202,10 @@ Usage: install.sh [option]
 Options:
 	1, --millennium      Install Millennium + LuaTools plugin
 	2, --non-millennium  Install SLSsteam/ACCELA + LuaTools standalone
-	3, --cancel          Exit without installing
-  -h, --help          Show this help
+	3, --uninstall       Uninstall everything (Millennium & Standalone)
+	4, --cancel          Exit without installing
+  -h, --help           Show this help
 
-If no option is provided, an interactive menu is shown.
 EOF
 }
 
@@ -248,23 +214,25 @@ interactive_menu() {
 	echo -e "${BOLD}LuaTools Installer${NC}"
 	echo "1) Millennium (v2.35.0 + Cleanup) + LuaTools plugin"
 	echo "2) (EXPERIMENTAL!) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
-	echo "3) Cancel"
+	echo "3) Uninstall Everything (Full Cleanup)"
+	echo "4) Cancel"
 	echo ""
 	local choice=""
 	if [[ -r /dev/tty ]]; then
-		printf "Choose installation mode [1-3]: " > /dev/tty
+		printf "Choose an option [1-4]: " > /dev/tty
 		IFS= read -r choice < /dev/tty || true
 	elif [[ -t 0 ]]; then
-		printf "Choose installation mode [1-3]: "
+		printf "Choose an option [1-4]: "
 		IFS= read -r choice || true
 	else
-		fail "No interactive TTY available. Re-run with --millennium or --non-millennium."
+		fail "No interactive TTY available."
 	fi
 	choice="${choice//[[:space:]]/}"
 	case "$choice" in
 		1) install_millennium_flow ;;
 		2) install_standalone_flow ;;
-		3) info "Cancelled." ; exit 0 ;;
+		3) uninstall_all_flow ;;
+		4) info "Cancelled." ; exit 0 ;;
 		*) fail "Invalid option: ${choice:-<empty>}" ;;
 	esac
 }
@@ -280,7 +248,10 @@ main() {
 		2|--non-millennium)
 			install_standalone_flow
 			;;
-		3|--cancel)
+		3|--uninstall)
+			uninstall_all_flow
+			;;
+		4|--cancel)
 			info "Cancelled."
 			exit 0
 			;;
@@ -296,9 +267,6 @@ main() {
 			exit 1
 			;;
 	esac
-
-	echo ""
-	info "If you use ACCELA downloads, set your ACCELA path in LuaTools settings/flow."
 }
 
 main "${1:-}"
