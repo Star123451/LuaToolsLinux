@@ -28,6 +28,60 @@ run_remote_script() {
 	curl -fsSL "$url" | bash
 }
 
+ask_headcrab() {
+	echo ""
+	info "Optional: Do you want to run headcrab?"
+	info "(Recommended to run if you haven't already)"
+	echo ""
+	local response=""
+	if [[ -r /dev/tty ]]; then
+		printf "Run headcrab? [y/N]: " > /dev/tty
+		IFS= read -r response < /dev/tty || true
+	elif [[ -t 0 ]]; then
+		printf "Run headcrab? [y/N]: "
+		IFS= read -r response || true
+	else
+		warn "No interactive TTY available. Skipping headcrab question."
+		return
+	fi
+	response="${response//[[:space:]]/}"
+	case "$response" in
+		y|Y|yes|YES) 
+			info "Running headcrab..."
+			curl -fsSL https://raw.githubusercontent.com/ciscosweater/enter-the-wired/main/enter-the-wired | bash || warn "Headcrab installation failed or was interrupted."
+			ok "Headcrab completed."
+			;;
+		*) info "Skipping headcrab." ;;
+	esac
+}
+
+ask_millennium() {
+	echo ""
+	info "Required: Do you want to run the Millennium installer?"
+	info "(required for use of LuaToolsLinux, say Yes if you haven't installed it yet)"
+	echo ""
+	local response=""
+	if [[ -r /dev/tty ]]; then
+		printf "Run Millennium installer? [y/N]: " > /dev/tty
+		IFS= read -r response < /dev/tty || true
+	elif [[ -t 0 ]]; then
+		printf "Run Millennium installer? [y/N]: "
+		IFS= read -r response || true
+	else
+		warn "No interactive TTY available. Skipping Millennium installer question."
+		return
+	fi
+	response="${response//[[:space:]]/}"
+	case "$response" in
+		y|Y|yes|YES) 
+			info "Running Millennium installer..."
+			curl -fsSL https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/scripts/install.sh | bash || warn "Millennium installation failed or was interrupted."
+			ok "Millennium installer completed."
+			;;
+		*) warn "Skipping Millennium installer. LuaToolsLinux requires Millennium."; return 1 ;;
+	esac
+}
+
 uninstall_all_flow() {
     info "Uninstalling everything..."
     
@@ -59,6 +113,9 @@ uninstall_all_flow() {
 }
 
 install_millennium_flow() {
+	ask_headcrab
+	ask_millennium || fail "Millennium is required for LuaToolsLinux installation."
+
 	info "Installing Millennium framework (Versão Fixa 2.35.0 + Limpeza)..."
 
 	cat << 'EOF' > /tmp/millennium_v235_installer.sh
@@ -185,15 +242,7 @@ EOF
 	ok "Millennium + LuaTools plugin install finished."
 }
 
-install_standalone_flow() {
-	info "Installing SLSsteam + ACCELA prerequisites..."
-	run_remote_script "$SLS_ACCELA_URL"
 
-	info "Installing LuaTools standalone (non-Millennium)..."
-	run_remote_script "$LUATOOLS_STANDALONE_URL"
-
-	ok "SLSsteam/ACCELA + LuaTools standalone install finished."
-}
 
 print_help() {
 	cat <<'EOF'
@@ -201,9 +250,8 @@ Usage: install.sh [option]
 
 Options:
 	1, --millennium      Install Millennium + LuaTools plugin
-	2, --non-millennium  Install SLSsteam/ACCELA + LuaTools standalone
-	3, --uninstall       Uninstall everything (Millennium & Standalone)
-	4, --cancel          Exit without installing
+	2, --uninstall       Uninstall everything (Millennium & Standalone)
+	3, --cancel          Exit without installing
   -h, --help           Show this help
 
 EOF
@@ -213,16 +261,15 @@ interactive_menu() {
 	echo ""
 	echo -e "${BOLD}LuaTools Installer${NC}"
 	echo "1) Millennium (v2.35.0 + Cleanup) + LuaTools plugin"
-	echo "2) (EXPERIMENTAL!) Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)"
-	echo "3) Uninstall Everything (Full Cleanup)"
-	echo "4) Cancel"
+	echo "2) Uninstall Everything (Full Cleanup)"
+	echo "3) Cancel"
 	echo ""
 	local choice=""
 	if [[ -r /dev/tty ]]; then
-		printf "Choose an option [1-4]: " > /dev/tty
+		printf "Choose an option [1-3]: " > /dev/tty
 		IFS= read -r choice < /dev/tty || true
 	elif [[ -t 0 ]]; then
-		printf "Choose an option [1-4]: "
+		printf "Choose an option [1-3]: "
 		IFS= read -r choice || true
 	else
 		fail "No interactive TTY available."
@@ -230,9 +277,8 @@ interactive_menu() {
 	choice="${choice//[[:space:]]/}"
 	case "$choice" in
 		1) install_millennium_flow ;;
-		2) install_standalone_flow ;;
-		3) uninstall_all_flow ;;
-		4) info "Cancelled." ; exit 0 ;;
+		2) uninstall_all_flow ;;
+		3) info "Cancelled." ; exit 0 ;;
 		*) fail "Invalid option: ${choice:-<empty>}" ;;
 	esac
 }
@@ -245,13 +291,10 @@ main() {
 		1|--millennium)
 			install_millennium_flow
 			;;
-		2|--non-millennium)
-			install_standalone_flow
-			;;
-		3|--uninstall)
+		2|--uninstall)
 			uninstall_all_flow
 			;;
-		4|--cancel)
+		3|--cancel)
 			info "Cancelled."
 			exit 0
 			;;
