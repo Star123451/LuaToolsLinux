@@ -96,30 +96,28 @@ local function on_load()
 
     local venv_dir = fs.join(plugin_dir, ".venv")
     local venv_python = fs.join(venv_dir, "bin", "python3")
-    if not fs.exists(venv_python) then
-        logger:info("LuaTools: creating venv...")
-        os.execute("python3 -m venv " .. venv_dir .. " 2>&1")
-    end
-    if fs.exists(venv_python) then
-        local requirements = fs.join(plugin_dir, "requirements.txt")
-        if fs.exists(requirements) then
-            local pip_cmd = venv_python .. " -m pip install -r " .. requirements .. " --quiet --disable-pip-version-check 2>&1"
-            local pip_rc = os.execute(pip_cmd)
-            if not pip_rc then
-                logger:warn("LuaTools: pip install failed: " .. tostring(pip_rc))
-            end
-        end
+    local bridge_py = fs.join(plugin_dir, "backend", "web_bridge_server.py")
+    local requirements = fs.join(plugin_dir, "requirements.txt")
+
+    local function shellquote(s)
+        return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
     end
 
-    local bridge_py = fs.join(plugin_dir, "backend", "web_bridge_server.py")
-    if fs.exists(bridge_py) then
-        local python_exe = fs.exists(venv_python) and venv_python or "python3"
-        local cmd = python_exe .. " " .. bridge_py .. " > /dev/null 2>&1 &"
-        os.execute(cmd)
-        logger:info("LuaTools bridge started with " .. python_exe .. ", Millennium " .. millennium.version())
-    else
-        logger:warn("LuaTools: bridge script not found at " .. bridge_py)
-    end
+    local starter_script = fs.join(plugin_dir, ".luatools_bridge_starter.sh")
+    local starter_content = "#!/bin/bash\nset -e\n"
+        .. "if [ ! -f " .. shellquote(venv_python) .. " ]; then\n"
+        .. "  python3 -m venv " .. shellquote(venv_dir) .. " 2>&1 || true\n"
+        .. "fi\n"
+        .. "if [ -f " .. shellquote(requirements) .. " ]; then\n"
+        .. "  " .. shellquote(venv_python) .. " -m pip install --quiet --disable-pip-version-check -r " .. shellquote(requirements) .. " 2>&1 || true\n"
+        .. "fi\n"
+        .. "exec " .. shellquote(venv_python) .. " " .. shellquote(bridge_py) .. " 2>&1\n"
+
+    write_file(starter_script, starter_content)
+    os.execute("chmod +x " .. shellquote(starter_script))
+    os.execute("nohup " .. shellquote(starter_script) .. " > /dev/null 2>&1 &")
+
+    logger:info("LuaTools bridge starting in background, Millennium " .. millennium.version())
 
     millennium.ready()
 end
