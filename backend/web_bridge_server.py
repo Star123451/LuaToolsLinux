@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""HTTP bridge that emulates Millennium.callServerMethod for LuaTools UI."""
 
 from __future__ import annotations
 
@@ -27,29 +26,35 @@ def _call_backend(method_name: str, args: Dict[str, Any]) -> Any:
     if method_name.startswith("_"):
         raise ValueError("Private method is not accessible")
 
-    func = getattr(luatools_main, method_name, None)
-    if func is None or not callable(func):
-        raise ValueError(f"Unknown method: {method_name}")
+    parts = method_name.split(".")
+    obj = luatools_main
+    for part in parts:
+        obj = getattr(obj, part, None)
+        if obj is None:
+            raise ValueError(f"Unknown method: {method_name}")
+
+    if not callable(obj):
+        raise ValueError(f"Method exists but is not callable: {method_name}")
 
     if not isinstance(args, dict):
         raise ValueError("args must be a JSON object")
 
-    return func(**args)
+    return obj(**args)
 
 
 class _BridgeHandler(BaseHTTPRequestHandler):
     server_version = "LuaToolsBridge/1.0"
 
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         _json_response(self, 200, {"success": True})
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/health":
             _json_response(self, 200, {"success": True, "service": "luatools-bridge"})
             return
         _json_response(self, 404, {"success": False, "error": "Not Found"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path != "/rpc":
             _json_response(self, 404, {"success": False, "error": "Not Found"})
             return
@@ -80,7 +85,6 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=38495)
     args = parser.parse_args()
 
-    # Best-effort startup parity with plugin mode.
     try:
         luatools_main.detect_steam_install_path()
     except Exception:
