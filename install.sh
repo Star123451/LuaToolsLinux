@@ -220,47 +220,34 @@ check_python_dependencies() {
         warn "python3 not found. Cannot check dependencies."
         return 1
     fi
-    if python3 -c "import httpx, bs4, ruamel.yaml" 2>/dev/null; then
-        ok "All Python dependencies are already satisfied."
-        return 0
-    fi
-    warn "Some Python dependencies are missing. Attempting to install them..."
     
-    local pip_cmd=""
-    if command -v pip3 &>/dev/null; then
-        pip_cmd="pip3"
-    elif command -v pip &>/dev/null; then
-        pip_cmd="pip"
-    else
-        warn "pip not found. Trying to install pip via ensurepip..."
-        python3 -m ensurepip --upgrade 2>/dev/null || {
-            warn "Could not install pip. Please install pip manually."
-            return 1
-        }
-        pip_cmd="python3 -m pip"
+    ensure_venv_module_installed
+    
+    local install_dir
+    install_dir=$(get_plugin_install_dir)
+    local venv_dir="$install_dir/.venv"
+    
+    info "Setting up Python virtual environment in $venv_dir..."
+    if [[ ! -d "$venv_dir" ]]; then
+        python3 -m venv "$venv_dir" || fail "Failed to create virtual environment"
     fi
     
-    local packages=("httpx==0.27.2" "beautifulsoup4" "ruamel.yaml==0.18.6")
-    for pkg in "${packages[@]}"; do
-        info "Installing $pkg ..."
-        if $pip_cmd install --user "$pkg" &>/dev/null; then
-            ok "Installed $pkg"
-        else
-            warn "Failed to install $pkg. Trying without --user..."
-            if $pip_cmd install "$pkg" &>/dev/null; then
-                ok "Installed $pkg (system-wide)"
-            else
-                warn "Could not install $pkg. Manual installation may be required."
-            fi
-        fi
-    done
+    info "Installing Python dependencies inside the virtual environment..."
+    if ! "$venv_dir/bin/pip" install --upgrade pip &>/dev/null; then
+        warn "Failed to upgrade pip inside venv. Continuing..."
+    fi
     
-    if python3 -c "import httpx, bs4, ruamel.yaml" 2>/dev/null; then
-        ok "Python dependencies successfully installed."
+    if ! "$venv_dir/bin/pip" install "httpx==0.27.2" "beautifulsoup4" "ruamel.yaml==0.18.6" &>/dev/null; then
+        warn "Failed to install dependencies via pip inside venv. Retrying with verbose output..."
+        "$venv_dir/bin/pip" install "httpx==0.27.2" "beautifulsoup4" "ruamel.yaml==0.18.6" || fail "Failed to install dependencies"
+    fi
+    
+    if "$venv_dir/bin/python" -c "import httpx, bs4, ruamel.yaml" &>/dev/null; then
+        ok "Python dependencies successfully installed in virtual environment."
+        inject_venv_into_main_py
         return 0
     else
-        warn "Python dependencies still missing. You may need to install them manually:"
-        echo "  pip install httpx beautifulsoup4 ruamel.yaml"
+        warn "Python dependencies still missing in virtual environment. Manual installation may be required."
         return 1
     fi
 }
