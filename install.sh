@@ -153,6 +153,10 @@ ensure_venv_module_installed() {
             info "Installing python via pacman..."
             sudo pacman -S --noconfirm python
             ;;
+        opensuse)
+            info "Installing python3-virtualenv via zypper..."
+            sudo zypper install -y python3-virtualenv
+            ;;
         *)
             fail "Could not automatically install python3-venv. Please install the virtualenv/venv package for python3 manually."
             ;;
@@ -366,6 +370,8 @@ get_distro_family() {
             echo "fedora"
         elif [[ "$ID" == "arch" || "$ID_LIKE" =~ arch ]]; then
             echo "arch"
+        elif [[ "$ID" =~ opensuse || "$ID_LIKE" =~ opensuse ]]; then
+            echo "opensuse"
         else
             echo "unknown"
         fi
