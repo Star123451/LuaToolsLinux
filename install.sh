@@ -97,6 +97,22 @@ PY
     if ! curl -fL "$asset_url" -o "$zip_file"; then
         fail "Download failed"
     fi
+    local install_dir
+    install_dir=$(get_plugin_install_dir)
+    mkdir -p "$(dirname "$install_dir")"
+    info "Installing to $install_dir"
+    if [[ -d "$install_dir" ]]; then
+        rm -rf "$install_dir"
+    fi
+    mkdir -p "$install_dir"
+    if ! extract_zip "$zip_file" "$install_dir"; then
+        fail "Extraction failed"
+    fi
+    ok "Plugin installed (version ${latest_tag:-latest})"
+}
+
+# ---------- Helper: get plugin install dir ----------
+get_plugin_install_dir() {
     local millennium_dir=""
     local candidates=(
         "$HOME/.local/share/millennium/plugins"
@@ -112,19 +128,89 @@ PY
     done
     if [[ -z "$millennium_dir" ]]; then
         millennium_dir="$HOME/.local/share/millennium/plugins"
-        mkdir -p "$millennium_dir"
-        warn "Created plugins directory at $millennium_dir"
     fi
-    local install_dir="$millennium_dir/$PLUGIN_NAME"
-    info "Installing to $install_dir"
-    if [[ -d "$install_dir" ]]; then
-        rm -rf "$install_dir"
+    echo "$millennium_dir/$PLUGIN_NAME"
+}
+
+# ---------- Helper: ensure venv module is installed on the system ----------
+ensure_venv_module_installed() {
+    if python3 -c "import venv" &>/dev/null; then
+        return 0
     fi
-    mkdir -p "$install_dir"
-    if ! extract_zip "$zip_file" "$install_dir"; then
-        fail "Extraction failed"
+    
+    warn "python3-venv module is not available. Attempting to install it..."
+    local family=$(get_distro_family)
+    case "$family" in
+        debian)
+            info "Installing python3-venv via apt..."
+            sudo apt-get update && sudo apt-get install -y python3-venv
+            ;;
+        fedora)
+            info "Installing python3-virtualenv via dnf..."
+            sudo dnf install -y python3-virtualenv
+            ;;
+        arch)
+            info "Installing python via pacman..."
+            sudo pacman -S --noconfirm python
+            ;;
+        *)
+            fail "Could not automatically install python3-venv. Please install the virtualenv/venv package for python3 manually."
+            ;;
+    esac
+    
+    if ! python3 -c "import venv" &>/dev/null; then
+        fail "Failed to install/verify python3 venv module."
     fi
-    ok "Plugin installed (version ${latest_tag:-latest})"
+    ok "python3 venv module is ready."
+}
+
+# ---------- Helper: inject venv site-packages into main.py ----------
+inject_venv_into_main_py() {
+    local install_dir
+    install_dir=$(get_plugin_install_dir)
+    local main_py="$install_dir/backend/main.py"
+    
+    if [[ ! -f "$main_py" ]]; then
+        warn "main.py not found at $main_py, skipping venv injection."
+        return
+    fi
+    
+    # Check if we already injected it to avoid duplicates
+    if grep -q "VENV SITE-PACKAGES INJECTION" "$main_py"; then
+        ok "venv injection already present in main.py."
+        return
+    fi
+    
+    info "Injecting venv site-packages into main.py..."
+    local tmp_file
+    tmp_file=$(mktemp)
+    
+    cat << 'EOF' > "$tmp_file"
+# === VENV SITE-PACKAGES INJECTION ===
+import sys
+import os
+try:
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.path.dirname(backend_dir)
+    venv_path = os.path.join(plugin_root, ".venv")
+    if os.path.exists(venv_path):
+        lib_dir = os.path.join(venv_path, "lib")
+        if os.path.exists(lib_dir):
+            for py_dir in os.listdir(lib_dir):
+                site_packages = os.path.join(lib_dir, py_dir, "site-packages")
+                if os.path.exists(site_packages):
+                    if site_packages not in sys.path:
+                        sys.path.insert(0, site_packages)
+                    break
+except Exception as e:
+    pass
+# ====================================
+EOF
+    
+    cat "$main_py" >> "$tmp_file"
+    mv "$tmp_file" "$main_py"
+    chmod +x "$main_py"
+    ok "main.py patched successfully."
 }
 
 # ---------- Python dependency check and installation (only for plugin) ----------
