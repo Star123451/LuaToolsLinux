@@ -25,6 +25,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 DEBUG=false
+INSTALL_LOCAL=false
 info() { echo -e "${CYAN}[INFO]${NC} $*"; }
 ok() { echo -e "${GREEN}[ OK ]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
@@ -57,20 +58,42 @@ PY
 
 # ---------- Install plugin from GitHub release ----------
 install_plugin_from_release() {
-    info "Installing LuaTools plugin from latest GitHub release..."
-    if ! command -v python3 &>/dev/null; then
-        fail "python3 is required to fetch release info"
+    local install_dir
+    install_dir=$(get_plugin_install_dir)
+    mkdir -p "$(dirname "$install_dir")"
+    info "Installing to $install_dir"
+    if [[ -d "$install_dir" ]]; then
+        rm -rf "$install_dir"
     fi
-    local tmp_dir
-    tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' EXIT
-    local meta_file="$tmp_dir/release.json"
-    if ! curl -fsSL "$GITHUB_API_URL" -o "$meta_file"; then
-        fail "Failed to fetch latest release metadata"
-    fi
-    local latest_tag asset_url
-    mapfile -t release_info < <(
-        python3 - "$meta_file" "$RELEASE_ASSET_NAME" <<'PY'
+    mkdir -p "$install_dir"
+
+    if $INSTALL_LOCAL; then
+        info "Installing LuaTools plugin from local workspace..."
+        local script_dir
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [[ -f "$script_dir/plugin.json" && -d "$script_dir/backend" && -d "$script_dir/public" ]]; then
+            cp -r "$script_dir/backend" "$install_dir/backend"
+            cp -r "$script_dir/public" "$install_dir/public"
+            cp "$script_dir/plugin.json" "$install_dir/plugin.json"
+            ok "Plugin installed (version local workspace)"
+        else
+            fail "Local workspace files (plugin.json, backend, public) not found in $script_dir."
+        fi
+    else
+        info "Installing LuaTools plugin from latest GitHub release..."
+        if ! command -v python3 &>/dev/null; then
+            fail "python3 is required to fetch release info"
+        fi
+        local tmp_dir
+        tmp_dir="$(mktemp -d)"
+        trap 'rm -rf "$tmp_dir"' EXIT
+        local meta_file="$tmp_dir/release.json"
+        if ! curl -fsSL "$GITHUB_API_URL" -o "$meta_file"; then
+            fail "Failed to fetch latest release metadata"
+        fi
+        local latest_tag asset_url
+        mapfile -t release_info < <(
+            python3 - "$meta_file" "$RELEASE_ASSET_NAME" <<'PY'
 import json, sys
 meta_file = sys.argv[1]
 asset_name = sys.argv[2]
@@ -85,30 +108,23 @@ for asset in data.get('assets', []):
 print(tag)
 print(asset_url)
 PY
-    )
-    latest_tag="${release_info[0]}"
-    asset_url="${release_info[1]}"
-    if [[ -z "$asset_url" ]]; then
-        fail "Release asset '$RELEASE_ASSET_NAME' not found"
+        )
+        latest_tag="${release_info[0]}"
+        asset_url="${release_info[1]}"
+        if [[ -z "$asset_url" ]]; then
+            fail "Release asset '$RELEASE_ASSET_NAME' not found"
+        fi
+        info "Latest release: ${latest_tag:-unknown}"
+        local zip_file="$tmp_dir/$RELEASE_ASSET_NAME"
+        info "Downloading $RELEASE_ASSET_NAME ..."
+        if ! curl -fL "$asset_url" -o "$zip_file"; then
+            fail "Download failed"
+        fi
+        if ! extract_zip "$zip_file" "$install_dir"; then
+            fail "Extraction failed"
+        fi
+        ok "Plugin installed (version ${latest_tag:-latest})"
     fi
-    info "Latest release: ${latest_tag:-unknown}"
-    local zip_file="$tmp_dir/$RELEASE_ASSET_NAME"
-    info "Downloading $RELEASE_ASSET_NAME ..."
-    if ! curl -fL "$asset_url" -o "$zip_file"; then
-        fail "Download failed"
-    fi
-    local install_dir
-    install_dir=$(get_plugin_install_dir)
-    mkdir -p "$(dirname "$install_dir")"
-    info "Installing to $install_dir"
-    if [[ -d "$install_dir" ]]; then
-        rm -rf "$install_dir"
-    fi
-    mkdir -p "$install_dir"
-    if ! extract_zip "$zip_file" "$install_dir"; then
-        fail "Extraction failed"
-    fi
-    ok "Plugin installed (version ${latest_tag:-latest})"
 }
 
 # ---------- Helper: get plugin install dir ----------
@@ -993,12 +1009,23 @@ interactive_menu() {
 
 # ---------- Entry point ----------
 main() {
+    local filtered_args=()
     for arg in "$@"; do
         if [[ "$arg" == "--debug" ]]; then
             DEBUG=true
             set -x
+        elif [[ "$arg" == "--local" ]]; then
+            INSTALL_LOCAL=true
+        else
+            filtered_args+=("$arg")
         fi
     done
+    if [[ ${#filtered_args[@]} -gt 0 ]]; then
+        set -- "${filtered_args[@]}"
+    else
+        set -- ""
+    fi
+
     require_cmd curl
     require_cmd bash
     if ! command -v git >/dev/null; then
@@ -1021,7 +1048,7 @@ main() {
         --cancel)              info "Cancelled." ; exit 0 ;;
         -h|--help)
             cat <<'EOF'
-Usage: install.sh [option] [--debug]
+Usage: install.sh [option] [--debug] [--local]
 
 Options:
     1, --install-all       Install all (Millennium beta + plugin + accela standard)
@@ -1033,6 +1060,7 @@ Options:
     7, --uninstall         Uninstall everything
     --cancel               Exit
     --debug                Enable debug output
+    --local                Install from local workspace instead of GitHub
     -h, --help             Show this help
 EOF
             exit 0
