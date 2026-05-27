@@ -148,6 +148,152 @@ get_plugin_install_dir() {
     echo "$millennium_dir/$PLUGIN_NAME"
 }
 
+# ---------- Helper: enable plugin in Millennium config.json ----------
+enable_plugin_in_config() {
+    local config_dir="$HOME/.config/millennium"
+    local config_file="$config_dir/config.json"
+    
+    info "Ensuring LuaTools is enabled in Millennium config.json..."
+    
+    if [[ ! -d "$config_dir" ]]; then
+        mkdir -p "$config_dir"
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        cat << 'EOF' > "$config_file"
+{
+  "general": {
+    "accentColor": "DEFAULT_ACCENT_COLOR",
+    "checkForMillenniumUpdates": true,
+    "checkForPluginAndThemeUpdates": true,
+    "injectCSS": true,
+    "injectJavascript": true,
+    "millenniumUpdateChannel": "stable",
+    "onMillenniumUpdate": 1,
+    "shouldShowThemePluginUpdateNotifications": true
+  },
+  "misc": {
+    "hasShownWelcomeModal": true
+  },
+  "notifications": {
+    "showNotifications": true,
+    "showPluginNotifications": true,
+    "showUpdateNotifications": true
+  },
+  "plugins": {
+    "enabledPlugins": [
+      "luatools"
+    ]
+  },
+  "themes": {
+    "activeTheme": "default",
+    "allowedScripts": true,
+    "allowedStyles": true
+  }
+}
+EOF
+        ok "Created new Millennium config.json with luatools enabled."
+        return 0
+    fi
+    
+    if command -v python3 &>/dev/null; then
+        python3 - "$config_file" <<'PY'
+import json, sys
+file_path = sys.argv[1]
+try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+
+if 'plugins' not in data:
+    data['plugins'] = {}
+enabled = data['plugins'].get('enabledPlugins', [])
+if 'luatools' not in enabled:
+    enabled.append('luatools')
+data['plugins']['enabledPlugins'] = enabled
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2)
+PY
+        ok "Enabled luatools in existing Millennium config.json."
+    else
+        if command -v jq &>/dev/null; then
+            local tmp_cfg
+            tmp_cfg=$(mktemp)
+            jq '.plugins.enabledPlugins = (.plugins.enabledPlugins + ["luatools"] | unique)' "$config_file" > "$tmp_cfg" && mv "$tmp_cfg" "$config_file"
+            ok "Enabled luatools in existing Millennium config.json using jq."
+        else
+            warn "python3/jq not available to safely edit config.json. Please ensure luatools is enabled manually in Millennium settings."
+        fi
+    fi
+}
+
+# ---------- Helper: configure launcher path automatically ----------
+configure_launcher_path() {
+    local install_dir
+    install_dir=$(get_plugin_install_dir)
+    local data_dir="$install_dir/backend/data"
+    local path_file="$data_dir/launcher_path.txt"
+    
+    info "Detecting ACCELA path to configure LuaTools automatically..."
+    
+    local accela_candidates=(
+        "$HOME/.local/share/ACCELA"
+        "$HOME/accela"
+    )
+    local files=(
+        "ACCELA.AppImage"
+        "run.sh"
+    )
+    
+    local detected_path=""
+    for dir in "${accela_candidates[@]}"; do
+        for f in "${files[@]}"; do
+            if [[ -f "$dir/$f" ]]; then
+                detected_path="$dir/$f"
+                break 2
+            fi
+        done
+    done
+    
+    if [[ -n "$detected_path" ]]; then
+        mkdir -p "$data_dir"
+        echo "$detected_path" > "$path_file"
+        ok "Configured launcher path to: $detected_path"
+    else
+        warn "ACCELA executable (ACCELA.AppImage or run.sh) not found. You will need to select it manually in the LuaTools settings."
+    fi
+}
+
+# ---------- Helper: enable PlayNotOwnedGames in SLSsteam config ----------
+configure_play_not_owned() {
+    local config_dir="$HOME/.config/SLSsteam"
+    local config_file="$config_dir/config.yaml"
+    
+    info "Setting PlayNotOwnedGames to yes in SLSsteam config.yaml..."
+    
+    if [[ ! -d "$config_dir" ]]; then
+        mkdir -p "$config_dir"
+    fi
+    
+    if [[ ! -f "$config_file" ]]; then
+        cat << 'EOF' > "$config_file"
+PlayNotOwnedGames: yes
+SafeMode: no
+EOF
+        ok "Created new SLSsteam config.yaml with PlayNotOwnedGames enabled."
+        return 0
+    fi
+    
+    if grep -q "^PlayNotOwnedGames:" "$config_file"; then
+        sed -i 's/^PlayNotOwnedGames:.*/PlayNotOwnedGames: yes/' "$config_file"
+    else
+        echo "PlayNotOwnedGames: yes" >> "$config_file"
+    fi
+    ok "Enabled PlayNotOwnedGames in existing SLSsteam config.yaml."
+}
+
 # ---------- Helper: ensure venv module is installed on the system ----------
 ensure_venv_module_installed() {
     if python3 -c "import venv" &>/dev/null; then
@@ -294,30 +440,6 @@ show_status() {
     else
         warn "Accela: NOT installed"
     fi
-}
-
-# ---------- Post-install instructions ----------
-show_post_install_instructions() {
-    if ! is_accela_installed; then
-        return
-    fi
-    echo ""
-    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
-    echo -e "${BOLD}${YELLOW}|                    IMPORTANT: Accela Configuration                    |${NC}"
-    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  1) Open accela, config options/downloads.                           ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  2) Ensure the option ${BOLD}\"Limit downloads to Steam Library\"${NC} is ${BOLD}ENABLED${NC}.              ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  3) In Steam, click the Steam name at the top-left corner.          ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}     Open Millennium → Plugins tab → Enable ${BOLD}LuaTools${NC}.                    ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  4) Go to Lua tools menu on Steam/config ${BOLD}\"External Launcher (ACCELA)\"${NC}               ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}     and click the folder icon.                                        ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  5) Navigate to ${BOLD}~/.local/share/ACCELA${NC} and select:                                   ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}       - ${GREEN}run.sh${NC} (if installed as script) or                                     ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}       - ${GREEN}ACCELA.AppImage${NC} (if using AppImage)                                  ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  6) Click the save icon (diskette).                                      ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}|${NC}  7) You can now add your game directly from the game page.                ${BOLD}${YELLOW}|${NC}"
-    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
-    echo ""
 }
 
 # ---------- Pre-flight checks ----------
@@ -631,6 +753,9 @@ install_millennium_legacy() {
     curl -fsSL "https://github.com/SteamClientHomebrew/Millennium/raw/refs/heads/legacy/scripts/install.sh" | bash || fail "Millennium Legacy installation failed."
     ok "Millennium Legacy installed"
     install_plugin_from_release
+    enable_plugin_in_config
+    configure_launcher_path
+    configure_play_not_owned
     check_python_dependencies
     start_steam
     info "Millennium Legacy + plugin installation completed. Steam started."
@@ -650,7 +775,8 @@ install_legacy_accela_and_sls() {
     curl -fsSL "$LEGACY_ACCELA_REPO" | bash || fail "Legacy Accela installation failed."
     
     ok "Legacy Accela (run.sh) and SLSsteam installed successfully."
-    show_post_install_instructions
+    configure_launcher_path
+    configure_play_not_owned
 }
 
 # ---------- Option 1: Install All (beta + standard accela) ----------
@@ -660,11 +786,13 @@ install_all() {
     force_close_steam
     install_millennium_beta
     install_plugin_from_release
+    enable_plugin_in_config
     check_python_dependencies
     install_accela_and_slssteam
+    configure_launcher_path
+    configure_play_not_owned
     start_steam
     show_status
-    show_post_install_instructions
     ok "Full installation complete. Steam has been started."
 }
 
@@ -680,12 +808,12 @@ install_millennium_flow() {
         install_millennium_beta
     fi
     install_plugin_from_release
+    enable_plugin_in_config
+    configure_launcher_path
+    configure_play_not_owned
     check_python_dependencies
     start_steam
     show_status
-    if is_accela_installed; then
-        show_post_install_instructions
-    fi
     ok "Plugin installation complete. Steam has been started."
 }
 
@@ -698,8 +826,9 @@ install_millennium_legacy_flow() {
 install_accela_only() {
     info "Installing accela and slssteam only (standard AppImage version)..."
     install_accela_and_slssteam
+    configure_launcher_path
+    configure_play_not_owned
     show_status
-    show_post_install_instructions
     ok "Accela installation completed."
 }
 
