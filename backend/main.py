@@ -1272,7 +1272,7 @@ def GetSLSPlayStatus(contentScriptQuery: str = "") -> str:
         with open(config_path, 'r', encoding='utf-8') as f:
             content = f.read()
             # Verifica se está configurado como 'yes'
-            is_enabled = "PlayNotOwnedGames: yes" in content.lower()
+            is_enabled = "playnotownedgames: yes" in content.lower() or "playnotownedgames: true" in content.lower()
             return json.dumps({"success": True, "enabled": is_enabled})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
