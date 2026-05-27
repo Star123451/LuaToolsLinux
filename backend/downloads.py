@@ -1005,18 +1005,29 @@ def _get_launcher_path_file() -> str:
     return os.path.join(os.path.dirname(__file__), "data", "launcher_path.txt")
 
 def load_launcher_path() -> str:
-    """Lê o caminho do launcher salvo. Se não existir, retorna o padrão do Bifrost."""
-    default_path = os.path.expanduser("~/.local/share/Bifrost/bin/Bifrost")
+    """Lê o caminho do launcher salvo. Se não existir, tenta encontrar o ACCELA automaticamente, caso contrário retorna o padrão do Bifrost."""
     try:
         path_file = _get_launcher_path_file()
         if os.path.exists(path_file):
             with open(path_file, "r", encoding="utf-8") as f:
                 saved_path = f.read().strip()
-                if saved_path:
+                if saved_path and os.path.exists(saved_path):
                     return saved_path
     except Exception as e:
         logger.warn(f"LuaTools: Erro ao ler caminho do launcher: {e}")
-    return default_path
+
+    # Fallback automático para o ACCELA (AppImage ou run.sh)
+    accela_candidates = [
+        os.path.expanduser("~/.local/share/ACCELA/ACCELA.AppImage"),
+        os.path.expanduser("~/.local/share/ACCELA/run.sh"),
+        os.path.expanduser("~/accela/ACCELA.AppImage"),
+        os.path.expanduser("~/accela/run.sh"),
+    ]
+    for cand in accela_candidates:
+        if os.path.exists(cand):
+            return cand
+
+    return os.path.expanduser("~/.local/share/Bifrost/bin/Bifrost")
 
 def save_launcher_path_config(path: str) -> str:
     """Salva o caminho do launcher escolhido pelo usuário."""

@@ -380,13 +380,24 @@ def UpdateMorrenusKey(key: str, contentScriptQuery: str = "") -> str:
 
 def GetLauncherPath(contentScriptQuery: str = "") -> str:
     path = load_launcher_path()
-    accela_default = os.path.expanduser("~/.local/share/ACCELA/run.sh")
 
-    # Se o caminho salvo for do Bifrost OU estiver vazio OU não existir, força o ACCELA
+    # Se o caminho salvo for do Bifrost OU estiver vazio OU não existir, tenta encontrar o ACCELA automaticamente
     if not path or "Bifrost" in path or not os.path.exists(path):
-        path = accela_default if os.path.exists(accela_default) else "/home/deck/.local/share/ACCELA/run.sh"
-        # Opcional: Descomente a linha abaixo se quiser que ele salve no .txt automaticamente
-        # save_launcher_path_config(path)
+        accela_candidates = [
+            os.path.expanduser("~/.local/share/ACCELA/ACCELA.AppImage"),
+            os.path.expanduser("~/.local/share/ACCELA/run.sh"),
+            os.path.expanduser("~/accela/ACCELA.AppImage"),
+            os.path.expanduser("~/accela/run.sh"),
+        ]
+        detected = ""
+        for cand in accela_candidates:
+            if os.path.exists(cand):
+                detected = cand
+                break
+        if detected:
+            path = detected
+        else:
+            path = os.path.expanduser("~/.local/share/ACCELA/run.sh") # fallback
 
     return json.dumps({"success": True, "path": path})
 
