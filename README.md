@@ -1,84 +1,104 @@
 # LuaTools (Linux)
 
-> A [Millennium](https://steambrew.app) plugin that downloads game manifest files for Steam on Linux.
+> A Linux version of LuaTools for Steam, built for [Millennium](https://steambrew.app) with support for SLSsteam + ACCELA integration.
 
-## Unified Installer
+## One-Command Install
 
-LuaTools now uses a single installer entrypoint that lets you choose:
-
-- `Millennium + LuaTools plugin`
-- `Non-Millennium (SLSsteam/ACCELA + LuaTools standalone)`
+Install **Millennium + LuaTools + ACCELA + SLSsteam** automatically with a single command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash
 ```
 
-For non-interactive installs:
+⚠️ **IMPORTANT:** Watch the video tutorial pinned in the Discord channel before configuring everything.
+
+If ACCELA is installed as an **AppImage**, you may need to manually locate the AppImage file by clicking the folder icon in the LuaTools settings menu and selecting the path yourself.
+
+---
+
+# What the Installer Does
+
+The installer now fully automates setup and troubleshooting.
+
+## Automatic Detection & Setup
+
+- Detects **Steam Flatpak/Snap** installs and explains how to switch to native Steam
+- Detects **Decky Loader** and offers to uninstall it
+- Detects whether ACCELA is:
+  - `AppImage`
+  - `run.sh`
+- Warns when manual AppImage path selection is required
+- Displays the currently installed Millennium version
+- Installs required Python dependencies automatically:
+  - `httpx`
+  - `beautifulsoup4`
+  - `ruamel.yaml`
+
+## Expanded Fixes Menu
+
+Built-in repair options for common issues:
+
+- Purchase error fix
+- Missing Keys fix
+- No licenses info fix
+- `fix-deps` runner
+
+## Full Uninstall Support
+
+Completely removes:
+
+- Millennium
+- LuaTools plugin
+- ACCELA
+- SLSsteam
+
+## Ubuntu / Debian Improvements
+
+Automatically checks for missing:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash -s -- --millennium
-curl -fsSL https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main/install.sh | bash -s -- --non-millennium
+libssl-dev:i386
 ```
 
-The non-Millennium mode installs a CLI wrapper at `~/.local/bin/luatools`.
+and offers to install it when needed.
 
-### Example CLI Commands
+---
 
-```bash
-luatools init-apis
-luatools add-fakeappid 480
-luatools add-token 480
-luatools add-dlcs 480
-```
+# Features
 
-**By [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)**
+- **One-click installs** through ACCELA
+- **Workshop Downloader** support
+- **Game Fix System**
+- **Linux execute permission fixer** (`chmod +x`)
+- **FakeAppId & token management**
+- **Ryuu Cookie & Morrenus Key support**
+- **Games database integration**
+- **Theme support**
+- **Automatic updates**
+- **Custom launcher path configuration**
 
-This is the **Linux-only** fork of LuaTools, adapted to work with [SLSsteam](https://github.com/AceSLS/SLSsteam) and [ACCELA](https://github.com/ciscosweater/enter-the-wired) instead of the Windows-only SteamTools.
+---
 
-## Features
+# Requirements
 
-- **One-Click Game Install** — Click "Add via LuaTools" to download games via ACCELA without manually hunting for manifests
-- **Workshop Downloader** — Download Steam Workshop content via DepotDownloaderMod
-- **Game Fix System** — Apply, manage, and remove game-specific fixes
-- **Linux Native Fix** — Recursively set execute permissions on game files (`chmod +x`)
-- **FakeAppId & Token Management** — Automatically configure SLSsteam's `config.yaml`
-- **Ryuu Cookie & Morrenus Key Support** — Manage API credentials from the UI
-- **Games Database** — Status pills showing game compatibility info
-- **Themes** — Customizable UI themes
-- **Auto-Update** — Self-update from GitHub releases
-- **Configurable Launcher Path** — Point to Bifrost or any custom launcher
+- Linux `x86_64`
+- Native Steam installation
+- Python `3.10+`
+- Pip
+- jq
 
-## Requirements
+## Supported Components
 
-- **Linux x86_64** (no ARM support — Millennium doesn't support ARM)
-- **Steam** for Linux
-- **[Millennium](https://steambrew.app)** — Steam client modding framework
-- **Python 3.10+**
+- [Millennium](https://steambrew.app)
+- [SLSsteam](https://github.com/AceSLS/SLSsteam)
+- [ACCELA / Enter The Wired](https://github.com/ciscosweater/enter-the-wired)
 
-### Important!
+---
 
-- **[SLSsteam](https://github.com/AceSLS/SLSsteam)** — Steam patcher (`.so` injection via `LD_AUDIT`)
-- **[ACCELA](https://github.com/ciscosweater/enter-the-wired)** — game downloader (DepotDownloader GUI)
-
-## Installation
-
-<details>
-<summary>Manual installation</summary>
-
-Please see this message in the LuaTools discord for manual installation steps:
-
-https://discord.com/channels/1408201417834893385/1473040386908885122/1473047251319394581
-
-</details>
-
-## How It Works
-
-### Path Resolution
-
-LuaTools discovers Steam and related tools at these locations:
+# Paths Used
 
 | Component | Path |
-|-----------|------|
+|---|---|
 | Steam root | `~/.steam/steam` or `~/.local/share/Steam` |
 | Lua scripts | `{steam_root}/config/stplug-in/*.lua` |
 | Depot manifests | `{steam_root}/depotcache/*.manifest` |
@@ -86,15 +106,31 @@ LuaTools discovers Steam and related tools at these locations:
 | SLSsteam config | `~/.config/SLSsteam/config.yaml` |
 | ACCELA | `~/.local/share/ACCELA/` or `~/accela/` |
 
-## Credits
+---
 
-- **LuaTools (Linux)** — by [StarWarsK](https://github.com/Star123451) & [geovanygrdt](https://github.com/gr33dster-glitch)
-- **Contributors** — [PeeblyWeeb](https://github.com/PeeblyWeeb)
-- **LuaTools** — original plugin by [madoiscool](https://github.com/madoiscool)
-- **SLSsteam** — by [AceSLS](https://github.com/AceSLS/SLSsteam)
-- **ACCELA / Enter The Wired** — by [ciscosweater](https://github.com/ciscosweater/enter-the-wired)
-- **Millennium** — by [SteamClientHomebrew](https://github.com/SteamClientHomebrew/Millennium)
+# Credits
 
-## License
+- **LuaTools Linux** — StarWarsK & geovanygrdt
+- **Contributors** — PeeblyWeeb
+- **Original LuaTools** — madoiscool
+- **SLSsteam** — AceSLS
+- **ACCELA / Enter The Wired** — ciscosweater
+- **Millennium** — SteamClientHomebrew
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=Star123451%2FLuaToolsLinux&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Star123451/LuaToolsLinux&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Star123451/LuaToolsLinux&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Star123451/LuaToolsLinux&type=date&legend=top-left" />
+ </picture>
+</a>
+
+---
+
+# License
 
 See the original LuaTools repository for license information.

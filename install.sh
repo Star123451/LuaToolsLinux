@@ -86,7 +86,7 @@ install_plugin_from_release() {
         fi
         local tmp_dir
         tmp_dir="$(mktemp -d)"
-        trap 'rm -rf "$tmp_dir"' EXIT
+        trap 'rm -rf "${tmp_dir:-}"' EXIT
         local meta_file="$tmp_dir/release.json"
         if ! curl -fsSL "$GITHUB_API_URL" -o "$meta_file"; then
             fail "Failed to fetch latest release metadata"
