@@ -362,12 +362,13 @@ start_steam() {
 # ---------- Steam compatibility (sem mudanças) ----------
 detect_steam_type() {
     local steam_type="unknown"
-    if command -v flatpak >/dev/null && flatpak list 2>/dev/null | grep -q "com.valvesoftware.Steam"; then
+    # Prioritize checking for native Steam first
+    if command -v steam >/dev/null && [[ -f /usr/bin/steam ]]; then
+        steam_type="native"
+    elif command -v flatpak >/dev/null && flatpak list 2>/dev/null | grep -q "com.valvesoftware.Steam"; then
         steam_type="flatpak"
     elif command -v snap >/dev/null && snap list 2>/dev/null | grep -q "^steam "; then
         steam_type="snap"
-    elif command -v steam >/dev/null && [[ -f /usr/bin/steam ]]; then
-        steam_type="native"
     fi
     echo "$steam_type"
 }
