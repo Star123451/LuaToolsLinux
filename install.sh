@@ -5,6 +5,7 @@ SELF_REPO_BASE="https://raw.githubusercontent.com/Star123451/LuaToolsLinux/main"
 LUATOOLS_LEGACY_URL="$SELF_REPO_BASE/update_legacy.sh"
 ENTERTHEWIRED_REPO="https://github.com/ciscosweater/enter-the-wired.git"
 LEGACY_ACCELA_REPO="https://raw.githubusercontent.com/aglairdev/enter-the-wired/main/enter-the-wired"
+ACCELA_FIX_REPO="https://github.com/Cybercountry/ACCELA_FIX.git"
 
 REPO_OWNER="Star123451"
 REPO_NAME="LuaToolsLinux"
@@ -30,26 +31,26 @@ debug() { $DEBUG && echo -e "${CYAN}[DEBUG]${NC} $*"; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"; }
 
-# ---------- Controle do modo read-only em sistemas imutáveis ----------
+# ---------- Read-only mode control for immutable systems ----------
 IMMUTABLE_DISABLED=false
 
 is_immutable_system() {
-    # Detecta SteamOS (Steam Deck)
+    # Detect SteamOS (Steam Deck)
     if [[ -f /etc/os-release ]]; then
         . /etc/os-release
         if [[ "$ID" == "steamos" ]]; then
             return 0
         fi
     fi
-    # Detecta fedora Silverblue/Kinoite
+    # Detect Fedora Silverblue/Kinoite
     if command -v rpm-ostree &>/dev/null; then
         return 0
     fi
-    # Detecta sistemas com ostree (ex: Endless OS)
+    # Detect ostree-based systems (e.g., Endless OS)
     if [[ -d /sysroot/ostree || -f /run/ostree-booted ]]; then
         return 0
     fi
-    # Comando específico do SteamOS
+    # SteamOS specific command
     if command -v steamos-readonly &>/dev/null; then
         return 0
     fi
@@ -63,14 +64,13 @@ disable_readonly() {
     if [[ "$IMMUTABLE_DISABLED" == "true" ]]; then
         return 0
     fi
-    info "Sistema imutável detectado. Desabilitando read-only temporariamente..."
+    info "Immutable system detected. Temporarily disabling read-only..."
     if command -v steamos-readonly &>/dev/null; then
-        sudo steamos-readonly disable || warn "steamos-readonly disable falhou"
+        sudo steamos-readonly disable || warn "steamos-readonly disable failed"
     elif command -v rpm-ostree &>/dev/null; then
-        # No Fedora imutável, desbloqueia para escrita (overlay)
-        sudo ostree admin unlock --hotfix || warn "ostree unlock falhou"
+        sudo ostree admin unlock --hotfix || warn "ostree unlock failed"
     else
-        warn "Não foi possível desabilitar read-only automaticamente. Continuando..."
+        warn "Could not disable read-only automatically. Continuing..."
     fi
     IMMUTABLE_DISABLED=true
 }
@@ -82,27 +82,25 @@ reenable_readonly() {
     if [[ "$IMMUTABLE_DISABLED" != "true" ]]; then
         return 0
     fi
-    info "Reabilitando read-only do sistema imutável..."
+    info "Re-enabling read-only on immutable system..."
     if command -v steamos-readonly &>/dev/null; then
-        sudo steamos-readonly enable || warn "steamos-readonly enable falhou"
+        sudo steamos-readonly enable || warn "steamos-readonly enable failed"
     elif command -v rpm-ostree &>/dev/null; then
-        # No Fedora imutável, após desbloquear, apenas reiniciar resolve,
-        # mas tentamos remover o overlay ou simplesmente avisar.
-        warn "Sistema rpm-ostree: read-only será reativado após reinicialização."
+        warn "rpm-ostree system: read-only will be re-enabled after reboot."
     fi
     IMMUTABLE_DISABLED=false
 }
 
-# Garantir que readonly seja reabilitado ao sair do script (mesmo com erro)
+# Ensure read-only is re-enabled on script exit (even on error)
 trap reenable_readonly EXIT
 
-# ---------- Instalar jq se ausente ----------
+# ---------- Install jq if missing ----------
 ensure_jq() {
     if command -v jq &>/dev/null; then
         return 0
     fi
-    warn "jq não encontrado. Tentando instalar automaticamente..."
-    disable_readonly   # Abre o sistema para escrita se necessário
+    warn "jq not found. Attempting to install automatically..."
+    disable_readonly   # Open system for writing if needed
     local family=$(get_distro_family)
     case "$family" in
         debian)
@@ -121,32 +119,32 @@ ensure_jq() {
             sudo apk add jq
             ;;
         *)
-            warn "Não foi possível instalar jq automaticamente. Instale manualmente."
+            warn "Could not install jq automatically. Please install manually."
             return 1
             ;;
     esac
     if command -v jq &>/dev/null; then
-        ok "jq instalado com sucesso."
+        ok "jq installed successfully."
     else
-        fail "Falha ao instalar jq. Instale manualmente."
+        fail "Failed to install jq. Please install manually."
     fi
 }
 
-# ---------- SteamOS preparação (pip etc) ----------
+# ---------- SteamOS preparation (pip etc) ----------
 prepare_steamos() {
     if ! is_immutable_system; then
         return
     fi
-    info "Preparando ambiente SteamOS (instalando python-pip e dependências)..."
+    info "Preparing SteamOS environment (installing python-pip and dependencies)..."
     disable_readonly
-    sudo pacman-key --init || warn "pacman-key --init falhou"
-    sudo pacman-key --populate archlinux || warn "populate archlinux falhou"
-    sudo pacman-key --populate holo || warn "populate holo falhou"
-    sudo pacman -S --noconfirm python-pip || warn "Instalação do python-pip falhou"
-    ok "Preparação SteamOS concluída."
+    sudo pacman-key --init || warn "pacman-key --init failed"
+    sudo pacman-key --populate archlinux || warn "populate archlinux failed"
+    sudo pacman-key --populate holo || warn "populate holo failed"
+    sudo pacman -S --noconfirm python-pip || warn "python-pip installation failed"
+    ok "SteamOS preparation complete."
 }
 
-# ---------- extract zip (sem mudanças) ----------
+# ---------- Extract zip ----------
 extract_zip() {
     local archive_path="$1"
     local destination="$2"
@@ -168,7 +166,7 @@ PY
     return 1
 }
 
-# ---------- Install plugin from GitHub release (agora com jq) ----------
+# ---------- Install plugin from GitHub release ----------
 install_plugin_from_release() {
     info "Installing LuaTools plugin from latest GitHub release..."
     ensure_jq
@@ -224,7 +222,7 @@ install_plugin_from_release() {
     ok "Plugin installed (version ${latest_tag:-latest})"
 }
 
-# ---------- Python dependencies (sem mudanças) ----------
+# ---------- Python dependencies ----------
 check_python_dependencies() {
     info "Checking Python dependencies (httpx, beautifulsoup4, ruamel.yaml)..."
     if ! command -v python3 &>/dev/null; then
@@ -276,7 +274,7 @@ check_python_dependencies() {
     fi
 }
 
-# ---------- Mostrar status (sem mudanças) ----------
+# ---------- Status display ----------
 show_status() {
     echo ""
     if is_millennium_installed; then
@@ -324,7 +322,7 @@ show_post_install_instructions() {
     echo ""
 }
 
-# ---------- Pre-flight checks (check_internet, arch, etc.) ----------
+# ---------- Pre-flight checks ----------
 check_internet() {
     info "Checking internet connectivity..."
     if ! curl -fsS --head "https://github.com" >/dev/null 2>&1; then
@@ -359,7 +357,7 @@ start_steam() {
     ok "Steam launched"
 }
 
-# ---------- Steam compatibility (sem mudanças) ----------
+# ---------- Steam compatibility ----------
 detect_steam_type() {
     local steam_type="unknown"
     # Prioritize checking for native Steam first
@@ -479,7 +477,7 @@ is_millennium_installed() {
         result=$(grep -i "version" "$HOME/.local/share/millennium/bootstrap.log" 2>/dev/null)
     fi
     [[ -n "$result" ]] && return 0
-    [[ -f "/usr/lib/millennium/libmillennium.so" ]] || [[ -f "/usr/bin/steam.millennium.bak" ]]
+    [[ -d "/usr/lib/millennium" && -n "$(ls /usr/lib/millennium/*.so 2>/dev/null | head -1)" ]] || [[ -f "/usr/bin/steam.millennium.bak" ]]
 }
 
 get_millennium_version() {
@@ -512,8 +510,9 @@ get_millennium_version() {
     else
         if [[ -f "/usr/lib/millennium/version.txt" ]]; then
             cat "/usr/lib/millennium/version.txt" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
-        elif [[ -f "/usr/lib/millennium/libmillennium.so" ]]; then
-            strings "/usr/lib/millennium/libmillennium.so" 2>/dev/null | grep -oE 'Millennium v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/.*v//'
+        elif ls /usr/lib/millennium/libmillennium*.so 2>/dev/null | head -1 | grep -q .; then
+            local so_file=$(ls /usr/lib/millennium/libmillennium*.so 2>/dev/null | head -1)
+            strings "$so_file" 2>/dev/null | grep -oE 'Millennium v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/.*v//'
         else
             echo ""
         fi
@@ -652,6 +651,54 @@ install_legacy_accela_and_sls() {
     show_post_install_instructions
 }
 
+# ===== NEW FUNCTION: Install Accela (Cybercountry) to fix illegal instruction =====
+install_accela_fix_illegal_instruction() {
+    info "Installing Accela to fix illegal instruction (by Cybercountry) + SLSsteam..."
+    
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    cd "$temp_dir"
+    
+    info "Cloning ACCELA_FIX repository from Cybercountry..."
+    if ! git clone "$ACCELA_FIX_REPO" ACCELA_FIX; then
+        warn "Git clone failed. Trying with curl fallback..."
+        rm -rf ACCELA_FIX
+        curl -fsSL "https://github.com/Cybercountry/ACCELA_FIX/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1 -C "$temp_dir" || {
+            fail "Failed to download ACCELA_FIX"
+        }
+        if [[ ! -f "$temp_dir/RUN_ME" ]]; then
+            fail "Could not obtain ACCELA_FIX files."
+        fi
+    else
+        cd ACCELA_FIX
+    fi
+    
+    chmod +x RUN_ME 2>/dev/null || chmod +x "$temp_dir/ACCELA_FIX/RUN_ME" 2>/dev/null || warn "RUN_ME not found or not executable"
+    
+    info "Executing ACCELA_FIX installer (RUN_ME) - this will set up Accela..."
+    if [[ -f "./RUN_ME" ]]; then
+        ./RUN_ME || warn "ACCELA_FIX installer reported issues, but continuing..."
+    elif [[ -f "$temp_dir/RUN_ME" ]]; then
+        "$temp_dir/RUN_ME" || warn "ACCELA_FIX installer reported issues, but continuing..."
+    else
+        warn "RUN_ME script not found. Installation may be incomplete."
+    fi
+    
+    cd - >/dev/null
+    rm -rf "$temp_dir"
+    
+    info "Installing SLSsteam via headcrab..."
+    if ! curl -fsSL "$HEADCRAB_URL" | bash; then
+        warn "SLSsteam installation had issues. You may need to run headcrab manually later."
+    else
+        ok "SLSsteam installed successfully."
+    fi
+    
+    ok "Accela (by Cybercountry) and SLSsteam installation completed."
+    show_post_install_instructions
+}
+# ===== END NEW FUNCTION =====
+
 # ---------- Install All ----------
 install_all() {
     info "Starting FULL installation (Millennium beta + plugin + accela standard)..."
@@ -706,7 +753,7 @@ install_legacy_accela_and_sls_only() {
     ok "Legacy Accela + SLSsteam installation completed."
 }
 
-# ---------- Fixes menu (com headcrab atualizado) ----------
+# ---------- Fixes menu (with new options) ----------
 fix_purchase_error() {
     info "Fixing 'Purchase error' by running headcrab script..."
     curl -fsSL "$HEADCRAB_URL" | bash || warn "Headcrab script failed."
@@ -750,52 +797,141 @@ fix_no_licenses_info() {
 }
 
 fix_remove_piracy_blocks() {
-    local theme_css_dir="$HOME/.steam/steam/millennium/themes/Steam/src/css"
-    local files_to_fix=(
-        "libraryroot.custom.css"
-        "overlay.custom.css"
-        "regular.css"
-        "startupLogin.custom.css"
-        "webkit.css"
-        "steam/gamepage.css"
+    local css_paths=(
+        "$HOME/.steam/steam/millennium/themes/Steam/src/css"
+        "$HOME/.local/share/Steam/millennium/themes/Steam/src/css"
+        "$HOME/.millennium/themes/Steam/src/css"
     )
-    echo ""
-    if [[ ! -d "$theme_css_dir" ]]; then
-        warn "Theme CSS directory not found: $theme_css_dir"
-        warn "Make sure Millennium and the theme are installed."
-        return 1
-    fi
-    ok "Directory found: $theme_css_dir"
-    local any_fixed=false
-    for filename in "${files_to_fix[@]}"; do
-        local filepath="$theme_css_dir/$filename"
-        if [[ ! -f "$filepath" ]]; then
-            echo "$filename -> NOT FOUND, skipping"
-            continue
-        fi
-        echo -n "$filename ... "
-        cp "$filepath" "$filepath.bak"
-        sed -i '/Pls remove any piracy plugin/d' "$filepath"
-        sed -i '/\[class\*="luatools"/d' "$filepath"
-        sed -i '/\[data-millennium-plugin\*="luatools"/d' "$filepath"
-        sed -i '/\[class\*="manilua"/d' "$filepath"
-        sed -i '/\[data-millennium-plugin\*="manilua"/d' "$filepath"
-        sed -i '/\[class\*="lumea"/d' "$filepath"
-        sed -i '/\[data-millennium-plugin\*="lumea"/d' "$filepath"
-        sed -i '/^[[:space:]]*$/d' "$filepath"
-        if ! cmp -s "$filepath" "$filepath.bak"; then
-            echo "✔ Removed"
-            any_fixed=true
-        else
-            rm -f "$filepath.bak"
-            echo "○ No block found"
+    local css_dir=""
+    for dir in "${css_paths[@]}"; do
+        if [[ -d "$dir" ]]; then
+            css_dir="$dir"
+            break
         fi
     done
+
+    if [[ -z "$css_dir" ]]; then
+        warn "Theme directory not found."
+        warn "Make sure Millennium and the SpaceTheme are installed."
+        return 1
+    fi
+
+    echo ""
+
+    python3 << 'PYEOF'
+import time, random, sys, shutil
+
+cols = shutil.get_terminal_size().columns - 4
+if cols < 20:
+    cols = 20
+
+matrix = "01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
+drops = [0] * cols
+
+for frame in range(80):
+    for i in range(cols):
+        if random.random() > 0.975:
+            drops[i] = 0
+        drops[i] += 1
+
+    line = ""
+    for i in range(cols):
+        if drops[i] > 0 and drops[i] < 12:
+            c = random.choice(matrix)
+            if drops[i] < 3:
+                line += f"\033[92m{c}\033[0m"
+            else:
+                line += f"\033[32m{c}\033[0m"
+        elif drops[i] >= 12:
+            line += " "
+            drops[i] = 0
+        else:
+            line += " "
+
+    sys.stdout.write("\r  \033[32m" + line + "\033[0m")
+    sys.stdout.flush()
+    time.sleep(0.04)
+
+sys.stdout.write("\r" + " " * (cols + 4) + "\r")
+PYEOF
+
+    echo ""
+    ok "${BOLD}BREAKING ANTI-PIRACY LOCKS...${NC}"
+    sleep 0.5
+    echo ""
+
+    local files=()
+    while IFS= read -r f; do
+        files+=("$f")
+    done < <(grep -rl "Ban piracy\|luatools\|manilua\|lumea" "$css_dir" --include="*.css" 2>/dev/null)
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+        ok "No blocks found."
+        return 0
+    fi
+
+    local total=${#files[@]}
+    local current=0
+    local bar_size=30
+    local any_fixed=false
+
+    for filepath in "${files[@]}"; do
+        current=$((current + 1))
+        local filename=$(basename "$filepath")
+
+        cp "$filepath" "$filepath.bak"
+        sleep 0.5
+
+        python3 - "$filepath" << 'PYEOF'
+import re, sys
+filepath = sys.argv[1]
+with open(filepath, 'r') as f:
+    c = f.read()
+old = c
+c = re.sub(r'/\*.*?[Bb]an\s+piracy\s+plugins.*?\*/.*?(?:\{|display:\s*none|color:\s*#[0-9a-fA-F]+\s*!important|\})', '', c, flags=re.DOTALL)
+c = re.sub(r'.*?(?:luatools|manilua|lumea).*?(?:\n|$)', '', c)
+c = re.sub(r'\n{3,}', '\n\n', c)
+if c != old:
+    with open(filepath, 'w') as f:
+        f.write(c)
+    sys.exit(0)
+else:
+    sys.exit(1)
+PYEOF
+
+        if [[ $? -eq 0 ]]; then
+            any_fixed=true
+        fi
+
+        local percent=$((current * 100 / total))
+        local filled=$((current * bar_size / total))
+        local empty=$((bar_size - filled))
+        local bar="${GREEN}[${NC}"
+        for ((i=0; i<filled; i++)); do bar+="${GREEN}=${NC}"; done
+        bar+="${GREEN}>${NC}"
+        for ((i=0; i<empty; i++)); do bar+="${GREEN}.${NC}"; done
+        bar+="${GREEN}]${NC}"
+
+        printf "\r  %s ${BOLD}%3d%%${NC} ${GREEN}Cracking %s...${NC}" "$bar" "$percent" "$filename"
+        sleep 0.8
+    done
+
+    echo ""
     echo ""
     if $any_fixed; then
-        ok "Anti-piracy blocks removed. Restart Steam for changes."
+        ok "${GREEN}All clean!${NC}"
+        sleep 0.5
+        echo -e "  ${GREEN}Removing display:none traps...${NC}"
+        sleep 0.6
+        echo -e "  ${GREEN}Neutralizing CSS selectors...${NC}"
+        sleep 0.4
+        echo -e "  ${GREEN}Stripping content blockers...${NC}"
+        sleep 0.5
+        ok "Restarting Steam..."
+        sh -c "sleep 1; pkill -9 steam; sleep 10; nohup steam > /dev/null 2>&1 &" &
+        ok "${BOLD}Steam rebooting with fixes applied.${NC}"
     else
-        warn "No changes made."
+        ok "No blocks found."
     fi
 }
 
@@ -920,22 +1056,141 @@ fix_online_fix_not_working() {
     read -p "Press Enter to continue..." < /dev/tty
 }
 
+# ===== NEW FIX FUNCTIONS =====
+fix_crack_dll_config() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Crack don't work?${NC}"
+    echo -e "${YELLOW}If your crack/online fix includes one or more .dll files, you need to tell Wine/Proton to load them properly.${NC}"
+    echo ""
+    echo -e "${BOLD}Steps:${NC}"
+    echo "1) Identify the DLL file(s) that came with the crack (e.g., voices38.dll, steam_api64.dll, OnlineFix64.dll, etc.)."
+    echo "2) In Steam, right-click on the game → Properties → General."
+    echo "3) In the 'LAUNCH OPTIONS' field, add:"
+    echo ""
+    echo -e "${GREEN}WINEDLLOVERRIDES=\"dllname=n,b\" %command%${NC}"
+    echo ""
+    echo -e "${YELLOW}Replace \"dllname\" with the actual DLL filename (without the .dll extension).${NC}"
+    echo ""
+    echo "Examples:"
+    echo -e "  - If the DLL is called ${GREEN}voices38.dll${NC} → ${GREEN}WINEDLLOVERRIDES=\"voices38=n,b\" %command%${NC}"
+    echo -e "  - If the DLL is called ${GREEN}OnlineFix64.dll${NC} → ${GREEN}WINEDLLOVERRIDES=\"OnlineFix64=n,b\" %command%${NC}"
+    echo -e "  - For multiple DLLs, separate with semicolons: ${GREEN}WINEDLLOVERRIDES=\"dll1=n,b;dll2=n,b\" %command%${NC}"
+    echo ""
+    echo "4) Close Properties and launch the game."
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+fix_game_not_downloading() {
+    echo ""
+    echo -e "${BOLD}${RED}⚠️  GAME NOT DOWNLOADING? ⚠️${NC}"
+    echo -e "${YELLOW}You probably skipped the post-installation configuration.${NC}"
+    echo -e "${YELLOW}You did NOT set the Accela path in LuaTools menu, or you are trying to download directly from Steam without Accela.${NC}"
+    echo ""
+    echo -e "${BOLD}Follow the instructions below that you skipped earlier:${NC}"
+    echo ""
+    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
+    echo -e "${BOLD}${YELLOW}|                    IMPORTANT: Accela Configuration                    |${NC}"
+    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  1) Open accela, config options/downloads.                           ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  2) Ensure the option ${BOLD}\"Limit downloads to Steam Library\"${NC} is ${BOLD}ENABLED${NC}.              ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  3) In Steam, click the Steam name at the top-left corner.          ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}     Open Millennium → Plugins tab → Enable ${BOLD}LuaTools${NC}.                    ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  4) Go to Lua tools menu on Steam/config ${BOLD}\"External Launcher (ACCELA)\"${NC}               ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}     and click the folder icon.                                        ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  5) Navigate to ${BOLD}~/.local/share/ACCELA${NC} and select:                                   ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}       - ${GREEN}run.sh${NC} (if installed as script) or                                     ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}       - ${GREEN}ACCELA.AppImage${NC} (if using AppImage)                                  ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  6) Click the save icon (diskette).                                      ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}|${NC}  7) You can now add your game directly from the game page.                ${BOLD}${YELLOW}|${NC}"
+    echo -e "${BOLD}${YELLOW}+----------------------------------------------------------------------+${NC}"
+    echo ""
+    echo -e "${GREEN}After completing these steps, try downloading your game again.${NC}"
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+
+fix_speed_units_explanation() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Accela download speed seems slower than Steam?${NC}"
+    echo -e "${YELLOW}This is usually just a difference in units!${NC}"
+    echo ""
+    echo -e "${BOLD}Explanation:${NC}"
+    echo -e "  - Steam shows download speed in ${BOLD}Megabits per second (Mbps)${NC} (symbol: Mb/s or Mbit/s)."
+    echo -e "  - Accela (and most browser download managers) shows speed in ${BOLD}Megabytes per second (MB/s)${NC}."
+    echo ""
+    echo -e "${BOLD}1 Megabyte (MB) = 8 Megabits (Mb)${NC}"
+    echo ""
+    echo "Example:"
+    echo "  Steam shows 600 Mb/s  →  divided by 8  →  equals 75 MB/s in Accela."
+    echo "  If Accela shows 75 MB/s → multiplied by 8 → equals 600 Mb/s on Steam."
+    echo ""
+    echo -e "${BOLD}So your speeds are actually the same, just displayed differently!${NC}"
+    echo ""
+    echo "-------------------------------------------"
+    echo ""
+    echo -e "${BOLD}Why does Accela's percentage update slowly on large files?${NC}"
+    echo -e "  - Accela downloads files ${BOLD}one by one${NC} (sequentially)."
+    echo "  - Steam downloads many small files in parallel, updating percentage more frequently."
+    echo -e "  - The ${BOLD}download speed${NC} (in MB/s) is what really matters."
+    echo "  - As long as the speed number matches your internet bandwidth, everything is fine."
+    echo ""
+    echo "To check if a download is actually progressing:"
+    echo -e "  - Look at the ${BOLD}speed indicator${NC} (MB/s in Accela). If it's > 0, you're downloading."
+    echo "  - The percentage may freeze for a few seconds on very large files, but it will jump once the file finishes."
+    echo ""
+    read -p "Press Enter to continue..." < /dev/tty
+}
+# ===== END NEW FIX FUNCTIONS =====
+
+show_tutorial() {
+    echo ""
+    echo -e "${BOLD}${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${YELLOW}║              ACCELA CONFIGURATION TUTORIAL                 ║${NC}"
+    echo -e "${BOLD}${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}You probably skipped the post-installation configuration.${NC}"
+    echo -e "${YELLOW}You did NOT set the Accela path in LuaTools menu, or you are trying to download directly from Steam without Accela.${NC}"
+    echo ""
+    echo -e "${BOLD}Follow the instructions below:${NC}"
+    echo ""
+    echo -e "  ${BOLD}${GREEN}1)${NC} Open accela, config options/downloads."
+    echo -e "  ${BOLD}${GREEN}2)${NC} Ensure the option ${BOLD}\"Limit downloads to Steam Library\"${NC} is ${BOLD}ENABLED${NC}."
+    echo -e "  ${BOLD}${GREEN}3)${NC} In Steam, click the Steam name at the top-left corner."
+    echo -e "     Open Millennium ${GREEN}→${NC} Plugins tab ${GREEN}→${NC} Enable ${BOLD}LuaTools${NC}."
+    echo -e "  ${BOLD}${GREEN}4)${NC} Go to Lua tools menu on Steam/config ${BOLD}\"External Launcher (ACCELA)\"${NC}"
+    echo -e "     and click the folder icon."
+    echo -e "  ${BOLD}${GREEN}5)${NC} Navigate to ${BOLD}~/.local/share/ACCELA${NC} and select:"
+    echo -e "       - ${GREEN}run.sh${NC} (if installed as script) or"
+    echo -e "       - ${GREEN}ACCELA.AppImage${NC} (if using AppImage)"
+    echo -e "  ${BOLD}${GREEN}6)${NC} Click the save icon (diskette)."
+    echo -e "  ${BOLD}${GREEN}7)${NC} You can now add your game directly from the game page."
+    echo ""
+    read -p "  Press Enter to continue..." < /dev/tty
+}
+
 fix_menu() {
     while true; do
         echo ""
-        echo -e "${BOLD}Common Issues Fixes${NC}"
-        echo "1) Purchase error or slssteam issues (headcrab)"
-        echo "2) Missing Keys"
-        echo "3) No licenses (information)"
-        echo "4) Run fix-deps (install system dependencies)"
-        echo "5) Remove anti-piracy blocks from Steam theme CSS"
-        echo "6) Reinstall Steam completely (clean) - WILL DELETE GAMES!"
-        echo "7) Missing game executable / Fail on compatibility tool (info)"
-        echo "8) Content Still Encrypted (info)"
-        echo "9) Online Fix doesn't work (info)"
-        echo "10) Back to main menu"
+        echo -e "${BOLD}${CYAN}╔══════════════════════════════════════╗${NC}"
+        echo -e "${BOLD}${CYAN}║         COMMON ISSUES FIXES          ║${NC}"
+        echo -e "${BOLD}${CYAN}╚══════════════════════════════════════╝${NC}"
         echo ""
-        printf "Choose an option [1-10]: " > /dev/tty
+        echo -e "  ${GREEN} 1)${NC} Purchase error / slssteam (headcrab)"
+        echo -e "  ${GREEN} 2)${NC} Missing Keys"
+        echo -e "  ${GREEN} 3)${NC} No licenses (info)"
+        echo -e "  ${GREEN} 4)${NC} Run fix-deps (install dependencies)"
+        echo -e "  ${GREEN} 5)${NC} Remove anti-piracy blocks from theme"
+        echo -e "  ${RED} 6)${NC} Reinstall Steam completely - ${RED}DELETES GAMES!${NC}"
+        echo -e "  ${GREEN} 7)${NC} Missing game executable (info)"
+        echo -e "  ${GREEN} 8)${NC} Content Still Encrypted (info)"
+        echo -e "  ${GREEN} 9)${NC} Online Fix doesn't work (info)"
+        echo -e "  ${GREEN}10)${NC} Crack don't work?"
+        echo -e "  ${GREEN}11)${NC} Game not downloading? Configuration"
+        echo -e "  ${GREEN}12)${NC} Accela speed slower? Explanation"
+        echo -e "  ${YELLOW}13)${NC} Back to main menu"
+        echo ""
+        printf "  ${BOLD}Choose [1-13]:${NC} " > /dev/tty
         local choice; read -r choice < /dev/tty
         case "$choice" in
             1) fix_purchase_error ;;
@@ -947,7 +1202,10 @@ fix_menu() {
             7) fix_missing_game_executable ;;
             8) fix_content_still_encrypted ;;
             9) fix_online_fix_not_working ;;
-            10) break ;;
+            10) fix_crack_dll_config ;;
+            11) fix_game_not_downloading ;;
+            12) fix_speed_units_explanation ;;
+            13) break ;;
             *) warn "Invalid option." ;;
         esac
     done
@@ -971,31 +1229,37 @@ uninstall_all_flow() {
     ok "Full uninstall completed."
 }
 
-# ---------- Menu principal ----------
+# ---------- Main menu ----------
 interactive_menu() {
     while true; do
         echo ""
-        echo -e "${BOLD}LuaTools Installer${NC}"
-        echo "1) Install All (Millennium beta + plugin + accela standard)"
-        echo "2) Install/Reinstall LuaTools plugin only (keeps Millennium)"
-        echo "3) Install Millennium Legacy + plugin (old version, fallback)"
-        echo "4) Install accela and slssteam only (standard - AppImage)"
-        echo "5) Install Legacy Accela (run.sh) + SLSsteam (fix for AppImage issues)"
-        echo "6) Fix common issues"
-        echo "7) Uninstall Everything"
-        echo "8) Cancel"
+        echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${NC}"
+        echo -e "${BOLD}${GREEN}║              LUA TOOLS INSTALLER                 ║${NC}"
+        echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${NC}"
         echo ""
-        printf "Choose an option [1-8]: " > /dev/tty
+        echo -e "  ${GREEN} 1)${NC} Install All ${CYAN}(Millennium + plugin + accela)${NC}"
+        echo -e "  ${GREEN} 2)${NC} Install/Reinstall LuaTools plugin only"
+        echo -e "  ${GREEN} 3)${NC} Install accela and slssteam only ${CYAN}(AppImage)${NC}"
+        echo -e "  ${GREEN} 4)${NC} Install Accela fix ${CYAN}(illegal instruction)${NC}"
+        echo -e "  ${GREEN} 5)${NC} Install Legacy Accela ${CYAN}(run.sh)${NC}"
+        echo -e "  ${YELLOW} 6)${NC} Fix common issues"
+        echo -e "  ${YELLOW} 7)${NC} Tutorial: Accela configuration"
+        echo -e "  ${RED} 8)${NC} Uninstall Everything"
+        echo -e "  ${RED} 9)${NC} Cancel"
+        echo ""
+        echo -e "${BOLD}${CYAN}──────────────────────────────────────────────────────${NC}"
+        printf "  ${BOLD}Choose [1-9]:${NC} " > /dev/tty
         local choice; read -r choice < /dev/tty
         case "$choice" in
             1) install_all ; break ;;
             2) install_millennium_flow ; break ;;
-            3) install_millennium_legacy_flow ; break ;;
-            4) install_accela_only ; break ;;
+            3) install_accela_only ; break ;;
+            4) install_accela_fix_illegal_instruction ; break ;;
             5) install_legacy_accela_and_sls_only ; break ;;
             6) fix_menu ;;
-            7) uninstall_all_flow ; break ;;
-            8) info "Cancelled." ; exit 0 ;;
+            7) show_tutorial ;;
+            8) uninstall_all_flow ; break ;;
+            9) info "Cancelled." ; exit 0 ;;
             *) warn "Invalid option." ;;
         esac
     done
@@ -1016,7 +1280,6 @@ main() {
     fi
     check_internet
     check_architecture
-    # Prepara ambiente SteamOS/imutável (desabilita readonly, instala pip)
     prepare_steamos
     check_steam_compatibility
     check_decky_loader
@@ -1025,11 +1288,12 @@ main() {
     case "${1:-}" in
         1|--install-all)       install_all ;;
         2|--millennium)        install_millennium_flow ;;
-        3|--legacy)            install_millennium_legacy_flow ;;
-        4|--accela)            install_accela_only ;;
+        3|--accela)            install_accela_only ;;
+        4|--fix-accela)        install_accela_fix_illegal_instruction ;;
         5|--legacy-accela)     install_legacy_accela_and_sls_only ;;
         6|--fix)               fix_menu ;;
-        7|--uninstall)         uninstall_all_flow ;;
+         7|--tutorial)          show_tutorial ;;
+         8|--uninstall)         uninstall_all_flow ;;
         --cancel)              info "Cancelled." ; exit 0 ;;
         -h|--help)
             cat <<'EOF'
@@ -1038,11 +1302,12 @@ Usage: install.sh [option] [--debug]
 Options:
     1, --install-all       Install all (Millennium beta + plugin + accela standard)
     2, --millennium        Install/Reinstall LuaTools plugin only (keeps Millennium)
-    3, --legacy            Install Millennium Legacy + plugin (old version, fallback)
-    4, --accela            Install accela and slssteam only (standard - AppImage)
+    3, --accela            Install accela and slssteam only (standard - AppImage)
+    4, --fix-accela        Install Accela to fix illegal instruction (by Cybercountry) + slssteam
     5, --legacy-accela     Install Legacy Accela (source-based, run.sh) + SLSsteam (FIX)
     6, --fix               Open fixes menu
-    7, --uninstall         Uninstall everything
+    7, --tutorial          Show Accela configuration tutorial
+    8, --uninstall         Uninstall everything
     --cancel               Exit
     --debug                Enable debug output
     -h, --help             Show this help
